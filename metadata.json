@@ -1,0 +1,5 @@
+{
+  "name": "LeaveTable",
+  "description": "A specialized leave management system for teams with specific 'one day on, one day off' shift patterns. Features quota management, specific leave types, and visual scheduling.",
+  "requestFramePermissions": []
+}
