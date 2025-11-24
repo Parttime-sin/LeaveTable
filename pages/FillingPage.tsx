@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings, LeaveEntry, LeaveType } from '../types';
-import { WEEKDAYS, FULL_DAY_LEAVES, HALF_DAY_LEAVES, ALL_LEAVES } from '../constants';
-import { Save, AlertCircle, Plus, X, Share2, Info } from 'lucide-react';
+import { WEEKDAYS, FULL_DAY_LEAVES, ALL_LEAVES } from '../constants';
+import { Save, AlertCircle, Plus, X, Share2 } from 'lucide-react';
 
 // Local date helpers to replace date-fns
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
@@ -190,7 +190,7 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
       {/* Calendar Grid Container - Added horizontal scroll for mobile */}
       <div className="bg-white shadow rounded-lg overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
-          <div className="min-w-[800px]"> {/* Force minimum width to prevent squishing on mobile */}
+          <div className="min-w-[700px] sm:min-w-full"> {/* Force minimum width to prevent squishing on mobile */}
             
             {/* Grid Header */}
             <div className="grid grid-cols-7 gap-px bg-gray-200 border-b border-gray-200">
@@ -217,7 +217,7 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                   <div 
                     key={dateStr}
                     style={colSpanStyle}
-                    className={`min-h-[140px] bg-white relative flex flex-col ${!workDay ? 'bg-slate-50' : ''}`}
+                    className={`min-h-[100px] bg-white relative flex flex-col ${!workDay ? 'bg-slate-50' : ''}`}
                   >
                     {/* Day Header */}
                     <div className="flex justify-between items-start p-2">
