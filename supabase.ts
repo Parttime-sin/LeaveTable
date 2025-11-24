@@ -7,7 +7,20 @@ import { createClient } from '@supabase/supabase-js';
 // VITE_SUPABASE_ANON_KEY=你的KEY
 // ------------------------------------------------------------------
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '請在.env檔案中設定VITE_SUPABASE_URL';
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '請在.env檔案中設定VITE_SUPABASE_ANON_KEY';
+// 安全讀取環境變數的輔助函式
+const getEnvVar = (key: keyof ImportMetaEnv): string => {
+  try {
+    // 檢查 import.meta 是否存在以及 import.meta.env 是否存在
+    if (typeof import.meta !== 'undefined' && import.meta.env) {
+      return import.meta.env[key] || '';
+    }
+  } catch (e) {
+    console.warn(`Failed to read env var ${key}`, e);
+  }
+  return '';
+};
+
+const supabaseUrl = getEnvVar('VITE_SUPABASE_URL') || '請在.env檔案中設定VITE_SUPABASE_URL';
+const supabaseKey = getEnvVar('VITE_SUPABASE_ANON_KEY') || '請在.env檔案中設定VITE_SUPABASE_ANON_KEY';
 
 export const supabase = createClient(supabaseUrl, supabaseKey);

@@ -8,20 +8,19 @@ import { supabase } from './supabase';
 const DEFAULT_SETTINGS: AppSettings = {
   year: new Date().getFullYear(),
   month: new Date().getMonth(),
-  firstWorkDay: '', // To be set by user
+  firstWorkDay: '', 
   members: [],
   dailyQuotas: {},
 };
 
-// Fixed ID for the singleton row in Supabase
+// Fixed ID for the singleton row in Supabase (for settings)
 const SCHEDULE_ID = 1;
 
 const App: React.FC = () => {
   const [page, setPage] = useState<PageView>('settings');
-  const [data, setData] = useState<AppState>({
-    settings: DEFAULT_SETTINGS,
-    leaves: []
-  });
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [leaves, setLeaves] = useState<LeaveEntry[]>([]);
+  
   const [loading, setLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -30,31 +29,37 @@ const App: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const { data: remoteData, error } = await supabase
+        setLoading(true);
+        
+        // Fetch Settings
+        const { data: scheduleData, error: scheduleError } = await supabase
           .from('schedules')
-          .select('*')
+          .select('settings')
           .eq('id', SCHEDULE_ID)
           .single();
 
-        if (error) {
-          // If code is PGRST116, it means no rows found (first time use)
-          if (error.code === 'PGRST116') {
-             // Will be created on first save
-             setLoading(false);
-             return;
-          }
-          throw error;
+        if (scheduleError && scheduleError.code !== 'PGRST116') {
+          throw scheduleError;
         }
 
-        if (remoteData) {
-          setData({
-            settings: remoteData.settings || DEFAULT_SETTINGS,
-            leaves: remoteData.leaves || []
-          });
+        if (scheduleData?.settings) {
+          setSettings(scheduleData.settings);
         }
+
+        // Fetch Leaves
+        const { data: leavesData, error: leavesError } = await supabase
+          .from('leaves')
+          .select('*');
+
+        if (leavesError) throw leavesError;
+
+        if (leavesData) {
+          setLeaves(leavesData);
+        }
+
       } catch (err: any) {
         console.error("Supabase fetch error:", err);
-        setConnectionError("無法連接至資料庫，請檢查 .env 設定或網路連線。");
+        setConnectionError("無法連接至資料庫，請檢查 .env 設定以及是否已建立 schedules 與 leaves 資料表。");
       } finally {
         setLoading(false);
       }
@@ -65,8 +70,9 @@ const App: React.FC = () => {
 
   // 2. Subscribe to Realtime Changes
   useEffect(() => {
-    const channel = supabase
-      .channel('schema-db-changes')
+    // Listen to Settings changes
+    const settingsChannel = supabase
+      .channel('public:schedules')
       .on(
         'postgres_changes',
         {
@@ -76,59 +82,112 @@ const App: React.FC = () => {
           filter: `id=eq.${SCHEDULE_ID}`,
         },
         (payload) => {
-          // Receive update from other devices
-          const newData = payload.new;
-          if (newData) {
-            setData({
-              settings: newData.settings,
-              leaves: newData.leaves
-            });
+          if (payload.new && payload.new.settings) {
+            setSettings(payload.new.settings);
+          }
+        }
+      )
+      .subscribe();
+
+    // Listen to Leaves changes (Insert/Update/Delete)
+    const leavesChannel = supabase
+      .channel('public:leaves')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'leaves' },
+        (payload) => {
+          // Refresh leaves simply by re-fetching or manipulating state based on event
+          // For simplicity and correctness, we handle state updates:
+          if (payload.eventType === 'INSERT') {
+            setLeaves(prev => [...prev, payload.new as LeaveEntry]);
+          } else if (payload.eventType === 'DELETE') {
+            setLeaves(prev => prev.filter(l => l.id !== payload.old.id));
+          } else if (payload.eventType === 'UPDATE') {
+            setLeaves(prev => prev.map(l => l.id === payload.new.id ? payload.new as LeaveEntry : l));
           }
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(settingsChannel);
+      supabase.removeChannel(leavesChannel);
     };
   }, []);
 
-  // 3. Save Logic
-  const saveData = async (newData: AppState) => {
-    setIsSyncing(true);
-    try {
-      // Optimistic update
-      setData(newData);
+  // 3. Actions
 
+  // Save Settings (Upsert to schedules table)
+  const handleSaveSettings = async (newSettings: AppSettings) => {
+    setIsSyncing(true);
+    // Optimistic update
+    setSettings(newSettings);
+    
+    try {
       const { error } = await supabase
         .from('schedules')
         .upsert({ 
           id: SCHEDULE_ID,
-          settings: newData.settings,
-          leaves: newData.leaves
+          settings: newSettings
         });
 
       if (error) throw error;
     } catch (err) {
-      console.error("Save error:", err);
-      alert("儲存失敗，請檢查網路連線");
+      console.error("Save settings error:", err);
+      alert("設定儲存失敗");
     } finally {
       setIsSyncing(false);
     }
   };
 
-  const handleSaveSettings = (newSettings: AppSettings) => {
-    saveData({
-      ...data,
-      settings: newSettings
-    });
+  // Add Leave (Insert to leaves table)
+  const handleAddLeave = async (leave: LeaveEntry) => {
+    setIsSyncing(true);
+    // Optimistic
+    setLeaves(prev => [...prev, leave]);
+
+    try {
+      const { error } = await supabase
+        .from('leaves')
+        .insert(leave);
+      
+      if (error) {
+        // Rollback on error
+        setLeaves(prev => prev.filter(l => l.id !== leave.id));
+        throw error;
+      }
+    } catch (err) {
+      console.error("Add leave error:", err);
+      alert("新增假單失敗");
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
-  const handleSaveLeaves = (newLeaves: LeaveEntry[]) => {
-    saveData({
-      ...data,
-      leaves: newLeaves
-    });
+  // Remove Leave (Delete from leaves table)
+  const handleRemoveLeave = async (leaveId: string) => {
+    setIsSyncing(true);
+    // Store for rollback
+    const backup = leaves.find(l => l.id === leaveId);
+    // Optimistic
+    setLeaves(prev => prev.filter(l => l.id !== leaveId));
+
+    try {
+      const { error } = await supabase
+        .from('leaves')
+        .delete()
+        .eq('id', leaveId);
+
+      if (error) {
+        if (backup) setLeaves(prev => [...prev, backup]);
+        throw error;
+      }
+    } catch (err) {
+      console.error("Remove leave error:", err);
+      alert("刪除假單失敗");
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   if (loading) {
@@ -145,56 +204,21 @@ const App: React.FC = () => {
   if (connectionError) {
      return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-        <div className="max-w-md bg-white p-6 rounded-lg shadow-lg text-center border-l-4 border-red-500">
-          <h2 className="text-xl font-bold text-red-600 mb-2">連線錯誤</h2>
-          <p className="text-slate-700 mb-4">{connectionError}</p>
-          <div className="text-sm text-slate-500 text-left bg-slate-100 p-4 rounded overflow-auto">
-            <p className="mb-2 font-bold">請確認以下事項：</p>
-            <ul className="list-disc pl-5 space-y-1">
-               <li>已建立 .env 檔案並填入 URL 與 KEY</li>
-               <li>Supabase 資料庫已建立 'schedules' 資料表</li>
-               <li>Supabase 已關閉 RLS 或設定允許寫入</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    );
-  }
+        <div className="max-w-2xl bg-white p-6 rounded-lg shadow-lg text-center border-l-4 border-red-500">
+          <h2 className="text-xl font-bold text-red-600 mb-2">資料庫連線錯誤</h2>
+          <p className="text-slate-700 mb-6">{connectionError}</p>
+          
+          <div className="text-sm text-slate-600 text-left bg-slate-100 p-6 rounded border border-slate-200">
+            <h3 className="font-bold mb-3 text-slate-800">請前往 Supabase SQL Editor 執行以下指令以建立所需資料表：</h3>
+            <pre className="bg-slate-800 text-green-400 p-4 rounded overflow-x-auto font-mono text-xs">
+{`-- 1. 建立設定表
+create table if not exists schedules (
+  id bigint primary key,
+  settings jsonb
+);
 
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans">
-      <Navbar currentPage={page} onNavigate={setPage} />
-      
-      {isSyncing && (
-        <div className="fixed top-4 right-4 bg-blue-600 text-white text-xs px-3 py-1 rounded-full shadow-lg z-50 flex items-center opacity-80">
-          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white mr-2"></div>
-          同步中...
-        </div>
-      )}
-
-      <main>
-        {page === 'settings' && (
-          <SettingsPage 
-            settings={data.settings} 
-            onSaveSettings={handleSaveSettings} 
-          />
-        )}
-        {page === 'filling' && (
-          <FillingPage 
-            settings={data.settings} 
-            savedLeaves={data.leaves}
-            onSaveLeaves={handleSaveLeaves}
-          />
-        )}
-      </main>
-
-      <footer className="bg-white border-t border-slate-200 mt-12 py-6">
-        <div className="max-w-7xl mx-auto px-4 text-center text-slate-500 text-sm">
-          <p>© {new Date().getFullYear()} ShiftScheduler Team Manager. 資料已啟用 Supabase 雲端同步。</p>
-        </div>
-      </footer>
-    </div>
-  );
-};
-
-export default App;
+-- 2. 建立假單表
+create table if not exists leaves (
+  id text primary key,
+  date text not null,
+  member_name text not null,
