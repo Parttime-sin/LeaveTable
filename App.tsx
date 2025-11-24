@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import SettingsPage from './pages/SettingsPage';
 import FillingPage from './pages/FillingPage';
-import { AppSettings, AppState, LeaveEntry, PageView } from './types';
-import { supabase } from './supabase';
+import { AppSettings, LeaveEntry, PageView } from './types';
+import { FirebaseService, DBData } from './services/firebase';
+import { Save, LogOut, Loader2, Flame, AlertCircle, HelpCircle, RefreshCw } from 'lucide-react';
 
 const DEFAULT_SETTINGS: AppSettings = {
   year: new Date().getFullYear(),
@@ -13,212 +15,276 @@ const DEFAULT_SETTINGS: AppSettings = {
   dailyQuotas: {},
 };
 
-// Fixed ID for the singleton row in Supabase (for settings)
-const SCHEDULE_ID = 1;
+// LocalStorage Keys
+const LS_CONFIG_KEY = 'shift_firebase_config';
 
 const App: React.FC = () => {
+  // Config State
+  const [firebaseConfigStr, setFirebaseConfigStr] = useState<string>(localStorage.getItem(LS_CONFIG_KEY) || '');
+  const [isConnected, setIsConnected] = useState(false);
+
+  // App Data State
   const [page, setPage] = useState<PageView>('settings');
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
   const [leaves, setLeaves] = useState<LeaveEntry[]>([]);
   
-  const [loading, setLoading] = useState(true);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [connectionError, setConnectionError] = useState<string | null>(null);
+  // UI State
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // 1. Fetch Initial Data
+  // 初始化：如果有 Config，嘗試連線
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        
-        // Fetch Settings
-        const { data: scheduleData, error: scheduleError } = await supabase
-          .from('schedules')
-          .select('settings')
-          .eq('id', SCHEDULE_ID)
-          .single();
-
-        if (scheduleError && scheduleError.code !== 'PGRST116') {
-          throw scheduleError;
-        }
-
-        if (scheduleData?.settings) {
-          setSettings(scheduleData.settings);
-        }
-
-        // Fetch Leaves
-        const { data: leavesData, error: leavesError } = await supabase
-          .from('leaves')
-          .select('*');
-
-        if (leavesError) throw leavesError;
-
-        if (leavesData) {
-          setLeaves(leavesData);
-        }
-
-      } catch (err: any) {
-        console.error("Supabase fetch error:", err);
-        setConnectionError("無法連接至資料庫，請檢查 .env 設定以及是否已建立 schedules 與 leaves 資料表。");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
+    if (firebaseConfigStr) {
+      connectToFirebase(firebaseConfigStr);
+    }
   }, []);
 
-  // 2. Subscribe to Realtime Changes
-  useEffect(() => {
-    // Listen to Settings changes
-    const settingsChannel = supabase
-      .channel('public:schedules')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'schedules',
-          filter: `id=eq.${SCHEDULE_ID}`,
-        },
-        (payload) => {
-          if (payload.new && payload.new.settings) {
-            setSettings(payload.new.settings);
-          }
-        }
-      )
-      .subscribe();
-
-    // Listen to Leaves changes (Insert/Update/Delete)
-    const leavesChannel = supabase
-      .channel('public:leaves')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'leaves' },
-        (payload) => {
-          // Refresh leaves simply by re-fetching or manipulating state based on event
-          // For simplicity and correctness, we handle state updates:
-          if (payload.eventType === 'INSERT') {
-            setLeaves(prev => [...prev, payload.new as LeaveEntry]);
-          } else if (payload.eventType === 'DELETE') {
-            setLeaves(prev => prev.filter(l => l.id !== payload.old.id));
-          } else if (payload.eventType === 'UPDATE') {
-            setLeaves(prev => prev.map(l => l.id === payload.new.id ? payload.new as LeaveEntry : l));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(settingsChannel);
-      supabase.removeChannel(leavesChannel);
-    };
-  }, []);
-
-  // 3. Actions
-
-  // Save Settings (Upsert to schedules table)
-  const handleSaveSettings = async (newSettings: AppSettings) => {
-    setIsSyncing(true);
-    // Optimistic update
-    setSettings(newSettings);
+  // 改進後的解析器：使用 new Function 來處理 JS 物件實字
+  const parseFirebaseConfig = (input: string) => {
+    const trimmed = input.trim();
+    if (!trimmed) throw new Error("設定檔內容為空");
     
+    // 1. 嘗試標準 JSON
     try {
-      const { error } = await supabase
-        .from('schedules')
-        .upsert({ 
-          id: SCHEDULE_ID,
-          settings: newSettings
-        });
-
-      if (error) throw error;
-    } catch (err) {
-      console.error("Save settings error:", err);
-      alert("設定儲存失敗");
-    } finally {
-      setIsSyncing(false);
+      return JSON.parse(trimmed);
+    } catch (e) {
+      // 忽略 JSON 錯誤，繼續嘗試 JS 解析
     }
-  };
 
-  // Add Leave (Insert to leaves table)
-  const handleAddLeave = async (leave: LeaveEntry) => {
-    setIsSyncing(true);
-    // Optimistic
-    setLeaves(prev => [...prev, leave]);
-
+    // 2. 嘗試解析 JS 物件字串 (例如從 Firebase Console 複製的 const firebaseConfig = { ... })
     try {
-      const { error } = await supabase
-        .from('leaves')
-        .insert(leave);
+      let objectString = trimmed;
+
+      // 嘗試抓取最外層的 { 和 }
+      const firstBrace = objectString.indexOf('{');
+      const lastBrace = objectString.lastIndexOf('}');
+
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        objectString = objectString.substring(firstBrace, lastBrace + 1);
+      } else {
+        // 如果找不到花括號，假設使用者只貼了內容但忘了括號，或者格式完全錯誤
+        throw new Error("找不到物件括號 { }");
+      }
+
+      // 使用 new Function 來執行這段 JS 代碼並回傳物件
+      const fn = new Function(`return ${objectString};`);
+      const result = fn();
       
-      if (error) {
-        // Rollback on error
-        setLeaves(prev => prev.filter(l => l.id !== leave.id));
-        throw error;
+      if (!result || typeof result !== 'object') {
+         throw new Error("解析結果不是有效的物件");
       }
-    } catch (err) {
-      console.error("Add leave error:", err);
-      alert("新增假單失敗");
-    } finally {
-      setIsSyncing(false);
+      return result;
+    } catch (e2) {
+      console.error("Config parsing error:", e2);
+      throw new Error("無法解析設定檔格式，請確保複製包含 { } 的完整程式碼片段");
     }
   };
 
-  // Remove Leave (Delete from leaves table)
-  const handleRemoveLeave = async (leaveId: string) => {
-    setIsSyncing(true);
-    // Store for rollback
-    const backup = leaves.find(l => l.id === leaveId);
-    // Optimistic
-    setLeaves(prev => prev.filter(l => l.id !== leaveId));
-
+  const connectToFirebase = async (configStr: string) => {
+    setLoading(true);
+    setErrorMsg(null);
     try {
-      const { error } = await supabase
-        .from('leaves')
-        .delete()
-        .eq('id', leaveId);
+      const configObj = parseFirebaseConfig(configStr);
+      FirebaseService.init(configObj);
+      
+      const data = await FirebaseService.loadData();
+      
+      if (data.settings) setSettings(data.settings);
+      else setSettings(DEFAULT_SETTINGS);
+      
+      if (data.leaves) setLeaves(data.leaves);
+      else setLeaves([]);
 
-      if (error) {
-        if (backup) setLeaves(prev => [...prev, backup]);
-        throw error;
+      setIsConnected(true);
+      localStorage.setItem(LS_CONFIG_KEY, configStr);
+    } catch (err: any) {
+      console.error("Connection Error:", err);
+      let msg = err.message || "發生未知錯誤";
+      
+      if (msg.includes("API key")) msg = "設定檔無效：找不到 API Key 欄位。";
+      else if (msg.includes("projectId")) msg = "設定檔無效：找不到 projectId 欄位。";
+      else if (msg.includes("解析")) msg = "格式錯誤：請複製包含 { } 的完整程式碼。";
+      else if (msg.includes("Service firestore is not available") || msg.includes("SDK 版本衝突")) {
+        msg = "系統元件載入衝突，請嘗試重新整理頁面。";
       }
-    } catch (err) {
-      console.error("Remove leave error:", err);
-      alert("刪除假單失敗");
+      
+      setErrorMsg(msg);
+      setIsConnected(false);
     } finally {
-      setIsSyncing(false);
+      setLoading(false);
     }
   };
 
-  if (loading) {
+  const handleManualConnect = () => {
+    if (!firebaseConfigStr.trim()) return setErrorMsg("請貼上 Firebase Config");
+    connectToFirebase(firebaseConfigStr);
+  };
+
+  const handleLogout = () => {
+    if (confirm("確定要登出嗎？這將清除瀏覽器紀錄的連線設定。")) {
+      localStorage.removeItem(LS_CONFIG_KEY);
+      setFirebaseConfigStr('');
+      setIsConnected(false);
+      setSettings(DEFAULT_SETTINGS);
+      setLeaves([]);
+      window.location.reload(); 
+    }
+  };
+
+  // Generic Save Function
+  const saveDataToFirebase = async (newSettings: AppSettings, newLeaves: LeaveEntry[]) => {
+    if (!isConnected) return;
+    setSyncing(true);
+    try {
+      const data: DBData = {
+        settings: newSettings,
+        leaves: newLeaves
+      };
+      await FirebaseService.saveData(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const onSaveSettings = (newSettings: AppSettings) => {
+    setSettings(newSettings);
+    saveDataToFirebase(newSettings, leaves);
+  };
+
+  const onSaveLeaves = (newLeaves: LeaveEntry[]) => {
+    setLeaves(newLeaves);
+    saveDataToFirebase(settings, newLeaves);
+  };
+
+  // --- RENDER: SETUP SCREEN ---
+  if (!isConnected) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-slate-600">正在同步雲端資料...</p>
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
+        <div className="bg-white p-8 rounded-xl shadow-lg max-w-lg w-full border border-slate-100">
+          <div className="flex justify-center mb-6">
+            <div className="bg-amber-50 p-4 rounded-full ring-4 ring-amber-50/50">
+              <Flame className="w-12 h-12 text-amber-500" />
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-center text-slate-800 mb-2">連接 Firebase 資料庫</h1>
+          <p className="text-sm text-slate-500 text-center mb-6">
+            請將 Firebase Console 提供的 Config 程式碼完整貼在下方。
+          </p>
+
+          {errorMsg && (
+            <div className="mb-6 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm flex flex-col items-start gap-2">
+              <div className="flex items-start">
+                <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+                <span className="flex-1 font-medium">{errorMsg}</span>
+              </div>
+              {errorMsg.includes("重新整理") && (
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="ml-7 text-xs bg-red-100 hover:bg-red-200 text-red-800 px-3 py-1 rounded-full flex items-center transition-colors"
+                >
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  點此重新整理
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-slate-700">
+                  Firebase Config
+                </label>
+                <a 
+                  href="https://console.firebase.google.com/" 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="text-xs text-amber-600 hover:text-amber-700 flex items-center"
+                >
+                  <HelpCircle className="w-3 h-3 mr-1" />
+                  前往 Console
+                </a>
+              </div>
+              <textarea
+                value={firebaseConfigStr}
+                onChange={(e) => setFirebaseConfigStr(e.target.value)}
+                placeholder={'const firebaseConfig = {\n  apiKey: "AIzaSy...",\n  authDomain: "...",\n  projectId: "..."\n};'}
+                className="w-full h-40 px-3 py-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all font-mono text-xs bg-slate-50"
+              />
+              <div className="mt-3 bg-blue-50 p-3 rounded-md border border-blue-100">
+                <h4 className="text-xs font-bold text-blue-800 mb-1">設定指南：</h4>
+                <ol className="list-decimal list-inside text-xs text-blue-700 space-y-1">
+                  <li>建立專案 ➔ 新增 Web App ➔ 複製 <code>const firebaseConfig = ...</code> 整段代碼。</li>
+                  <li>左側選單 ➔ <b>Firestore Database</b> ➔ 建立資料庫。</li>
+                  <li>
+                    <span className="font-bold">重要：</span>
+                    選擇 <b>Start in test mode</b> (測試模式) 以允許讀寫。
+                  </li>
+                </ol>
+              </div>
+            </div>
+
+            <button
+              onClick={handleManualConnect}
+              disabled={loading || !firebaseConfigStr}
+              className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-amber-600 hover:bg-amber-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : '連線並載入資料'}
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (connectionError) {
-     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 px-4">
-        <div className="max-w-2xl bg-white p-6 rounded-lg shadow-lg text-center border-l-4 border-red-500">
-          <h2 className="text-xl font-bold text-red-600 mb-2">資料庫連線錯誤</h2>
-          <p className="text-slate-700 mb-6">{connectionError}</p>
-          
-          <div className="text-sm text-slate-600 text-left bg-slate-100 p-6 rounded border border-slate-200">
-            <h3 className="font-bold mb-3 text-slate-800">請前往 Supabase SQL Editor 執行以下指令以建立所需資料表：</h3>
-            <pre className="bg-slate-800 text-green-400 p-4 rounded overflow-x-auto font-mono text-xs">
-{`-- 1. 建立設定表
-create table if not exists schedules (
-  id bigint primary key,
-  settings jsonb
-);
+  // --- RENDER: MAIN APP ---
+  return (
+    <div className="min-h-screen bg-slate-50 pb-20">
+      <Navbar currentPage={page} onNavigate={setPage} />
+      
+      {/* Status Bar */}
+      <div className="bg-slate-800 text-slate-300 px-4 py-1 text-xs flex justify-between items-center shadow-inner">
+        <div className="flex items-center space-x-4">
+          <span className="flex items-center text-amber-400">
+            <Flame className="w-3 h-3 mr-1" />
+            Firebase Connected
+          </span>
+        </div>
+        <div className="flex items-center space-x-3">
+          {syncing ? (
+             <span className="flex items-center text-yellow-400">
+               <Loader2 className="w-3 h-3 animate-spin mr-1" />
+               儲存中...
+             </span>
+          ) : (
+             <span className="flex items-center text-green-400">
+               <Save className="w-3 h-3 mr-1" />
+               已同步
+             </span>
+          )}
+          <button onClick={handleLogout} className="hover:text-white flex items-center ml-2 border-l border-slate-600 pl-3 transition-colors">
+            <LogOut className="w-3 h-3 mr-1" /> 登出
+          </button>
+        </div>
+      </div>
 
--- 2. 建立假單表
-create table if not exists leaves (
-  id text primary key,
-  date text not null,
-  member_name text not null,
+      {page === 'settings' ? (
+        <SettingsPage 
+          settings={settings} 
+          onSaveSettings={onSaveSettings} 
+        />
+      ) : (
+        <FillingPage 
+          settings={settings} 
+          savedLeaves={leaves} 
+          onSaveLeaves={onSaveLeaves} 
+        />
+      )}
+    </div>
+  );
+};
+
+export default App;
