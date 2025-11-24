@@ -26,16 +26,15 @@ const App: React.FC = () => {
     const leavesRef = db.ref('leaves');
 
     // Listen for settings changes
-    const onSettingsChange = (snapshot: any) => {
+    const onSettingsChange = settingsRef.on('value', (snapshot) => {
       const val = snapshot.val();
       if (val) {
         setData(prev => ({ ...prev, settings: val }));
       }
-    };
-    settingsRef.on('value', onSettingsChange);
+    });
 
     // Listen for leaves changes
-    const onLeavesChange = (snapshot: any) => {
+    const onLeavesChange = leavesRef.on('value', (snapshot) => {
       const val = snapshot.val();
       if (val) {
         // Firebase might return an object if indices are keys, ensure array
@@ -44,8 +43,7 @@ const App: React.FC = () => {
       } else {
         setData(prev => ({ ...prev, leaves: [] }));
       }
-    };
-    leavesRef.on('value', onLeavesChange);
+    });
 
     return () => {
       settingsRef.off('value', onSettingsChange);

@@ -13,8 +13,6 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
-
-export const db = firebase.database();
+// Check for existing apps to prevent re-initialization errors in hot-reload environments
+const app = !firebase.apps.length ? firebase.initializeApp(firebaseConfig) : firebase.app();
+export const db = app.database();

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings } from '../types';
 import { WEEKDAYS } from '../constants';
-import { Users, Calendar, AlertTriangle, Plus, Trash2, ArrowLeft, ArrowRight, CheckCircle2, Sliders, Eraser, X, Save } from 'lucide-react';
+import { Users, Calendar, AlertTriangle, Plus, Trash2, ArrowLeft, ArrowRight, CheckCircle2, Sliders, Eraser, Save, Activity, Wifi } from 'lucide-react';
+import { db } from '../firebase';
 
 // Local date helpers to replace date-fns
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
@@ -62,6 +63,38 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
   // Single Day Edit State
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [singleQuotaValue, setSingleQuotaValue] = useState<string>('');
+
+  // Test Connection State
+  const [testLastPing, setTestLastPing] = useState<string>('等待測試...');
+  const [isTesting, setIsTesting] = useState(false);
+
+  // Listen for test connection changes
+  useEffect(() => {
+    const testRef = db.ref('_connection_test');
+    const listener = testRef.on('value', (snapshot) => {
+      const val = snapshot.val();
+      if (val && val.timestamp) {
+        setTestLastPing(new Date(val.timestamp).toLocaleString());
+      }
+    });
+    return () => {
+      testRef.off('value', listener);
+    };
+  }, []);
+
+  const handleTestConnection = () => {
+    setIsTesting(true);
+    db.ref('_connection_test').set({
+      timestamp: Date.now(),
+      message: 'Hello Firebase!'
+    }).then(() => {
+      setTimeout(() => setIsTesting(false), 500);
+    }).catch((err) => {
+      console.error(err);
+      setTestLastPing('連線失敗，請檢查 Console');
+      setIsTesting(false);
+    });
+  };
 
   const handleMonthChange = (increment: number) => {
     const currentDate = new Date(localSettings.year, localSettings.month);
@@ -297,6 +330,35 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
               ))}
             </div>
           </div>
+
+          {/* 3. Database Connection Test */}
+          <div className="bg-white shadow rounded-lg p-6 border border-blue-100">
+            <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
+              <Activity className="w-5 h-5 mr-2 text-primary" />
+              系統連線測試
+            </h2>
+            <div className="bg-slate-50 p-4 rounded-lg">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm text-slate-600 flex items-center">
+                  <Wifi className="w-4 h-4 mr-1" /> 資料庫回應
+                </span>
+                <button
+                  onClick={handleTestConnection}
+                  disabled={isTesting}
+                  className="px-3 py-1 bg-white border border-slate-300 rounded text-xs hover:bg-slate-100 active:bg-slate-200 transition-colors"
+                >
+                  {isTesting ? '發送中...' : '發送測試訊號'}
+                </button>
+              </div>
+              <div className="text-xs text-slate-500 font-mono bg-white p-2 rounded border border-slate-200">
+                最後接收: {testLastPing}
+              </div>
+              <p className="text-[10px] text-slate-400 mt-2">
+                * 點擊測試後，若「最後接收」時間更新，代表 Firebase 讀寫功能正常。
+              </p>
+            </div>
+          </div>
+
         </div>
 
         {/* Right Column: Quota Calendar */}
