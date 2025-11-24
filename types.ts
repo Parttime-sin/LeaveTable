@@ -27,6 +27,7 @@ export interface LeaveEntry {
   date: string;
   memberName: string;
   type: LeaveType;
+  timestamp?: number;
 }
 
 export interface AppState {

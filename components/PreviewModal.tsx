@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Calendar as CalendarIcon } from 'lucide-react';
+import { X, User, Calendar as CalendarIcon } from 'lucide-react';
 import { AppSettings, LeaveEntry } from '../types';
 import { WEEKDAYS } from '../constants';
 

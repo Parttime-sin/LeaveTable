@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings, LeaveEntry, LeaveType } from '../types';
-import { WEEKDAYS, FULL_DAY_LEAVES, ALL_LEAVES } from '../constants';
-import { Save, AlertCircle, Plus, X, Share2 } from 'lucide-react';
+import { WEEKDAYS, FULL_DAY_LEAVES, HALF_DAY_LEAVES, ALL_LEAVES } from '../constants';
+import { Save, AlertCircle, Plus, X, Share2, Info } from 'lucide-react';
 
 // Local date helpers to replace date-fns
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
@@ -60,16 +60,15 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
   }, [savedLeaves]);
 
   const handleSave = () => {
+    // This triggers the write to Firebase in App.tsx
     onSaveLeaves(currentLeaves);
     setShowSaveSuccess(true);
     setTimeout(() => setShowSaveSuccess(false), 3000);
   };
 
   const handleCopyLink = () => {
-    // In a real app with backend, this would copy a specific ID URL.
-    // Here we just copy current location to simulate.
     navigator.clipboard.writeText(window.location.href);
-    alert('連結已複製！(注意：此為單機示範版，資料僅儲存於此瀏覽器)');
+    alert('連結已複製！');
   };
 
   const isWorkDay = (dateStr: string) => {
@@ -90,14 +89,18 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
       date: selectedDate,
       memberName: currentUser,
       type: selectedType as LeaveType,
+      timestamp: Date.now(), // Add timestamp here
     };
 
     // Remove existing leave for this person on this date if exists
     const filtered = currentLeaves.filter(l => !(l.date === selectedDate && l.memberName === currentUser));
     
-    setCurrentLeaves([...filtered, newLeave]);
+    const updatedList = [...filtered, newLeave];
+    setCurrentLeaves(updatedList);
+    
+    // Reset form (Empty the form)
     setSelectedType('');
-    setSelectedDate(null); // Close modal logic
+    setSelectedDate(null); 
   };
 
   const handleRemoveLeave = (id: string) => {
@@ -114,8 +117,6 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
   const isIntegerQuota = Number.isInteger(quotaForSelected);
   
   // Available leave types based on quota
-  // Rule: If Integer -> Standard Leaves (FULL_DAY_LEAVES)
-  // Rule: If Non-Integer -> Standard Leaves + Overnight (ALL_LEAVES)
   const availableLeaveTypes = !selectedDate 
     ? [] 
     : isIntegerQuota 
@@ -190,7 +191,7 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
       {/* Calendar Grid Container - Added horizontal scroll for mobile */}
       <div className="bg-white shadow rounded-lg overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
-          <div className="min-w-[700px] sm:min-w-full"> {/* Force minimum width to prevent squishing on mobile */}
+          <div className="min-w-[800px]"> {/* Force minimum width to prevent squishing on mobile */}
             
             {/* Grid Header */}
             <div className="grid grid-cols-7 gap-px bg-gray-200 border-b border-gray-200">
@@ -217,7 +218,7 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                   <div 
                     key={dateStr}
                     style={colSpanStyle}
-                    className={`min-h-[100px] bg-white relative flex flex-col ${!workDay ? 'bg-slate-50' : ''}`}
+                    className={`min-h-[140px] bg-white relative flex flex-col ${!workDay ? 'bg-slate-50' : ''}`}
                   >
                     {/* Day Header */}
                     <div className="flex justify-between items-start p-2">

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings } from '../types';
 import { WEEKDAYS } from '../constants';
-import { Users, Calendar, AlertTriangle, Plus, Trash2, ArrowLeft, ArrowRight, CheckCircle2, Sliders, Eraser, Save } from 'lucide-react';
+import { Users, Calendar, AlertTriangle, Plus, Trash2, ArrowLeft, ArrowRight, CheckCircle2, Sliders, Eraser, X, Save } from 'lucide-react';
 
 // Local date helpers to replace date-fns
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
