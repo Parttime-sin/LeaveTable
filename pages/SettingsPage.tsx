@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { Users, Calendar, AlertTriangle, Plus, Trash2, ArrowLeft, ArrowRight, CheckCircle2, Sliders, Eraser, Save, Activity, Wifi, Loader2 } from 'lucide-react';
 import { AppSettings } from '../types';
-import { WEEKDAYS } from '../constants';
-import { Users, Calendar, AlertTriangle, Plus, Trash2, ArrowLeft, ArrowRight, CheckCircle2, Sliders, Eraser, Save, Activity, Wifi } from 'lucide-react';
-import { db } from '../firebase';
 
-// Local date helpers to replace date-fns
+// --- Local Date Helpers ---
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
 const endOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0);
 const eachDayOfInterval = ({ start, end }: { start: Date, end: Date }) => {
@@ -48,12 +46,15 @@ const addDays = (date: Date, amount: number) => {
   return d;
 };
 
+// --- SettingsPage Component ---
+
 interface SettingsPageProps {
   settings: AppSettings;
+  rtdb: any; // Realtime Database instance
   onSaveSettings: (newSettings: AppSettings) => void;
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ settings, rtdb, onSaveSettings }) => {
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [newMemberName, setNewMemberName] = useState('');
   
@@ -68,62 +69,84 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
   const [testLastPing, setTestLastPing] = useState<string>('等待測試...');
   const [isTesting, setIsTesting] = useState(false);
 
-  // Listen for test connection changes
+  // Sync props to local state when props change (e.g. initial load from DB)
   useEffect(() => {
-    const testRef = db.ref('_connection_test');
-    const listener = testRef.on('value', (snapshot) => {
+    setLocalSettings(settings);
+  }, [settings]);
+
+  // Listen for test connection changes (Legacy/v8 RTDB)
+  useEffect(() => {
+    if (!rtdb) return;
+
+    const testRef = rtdb.ref('_connection_test');
+    
+    const onTestChange = (snapshot: any) => {
       const val = snapshot.val();
       if (val && val.timestamp) {
         setTestLastPing(new Date(val.timestamp).toLocaleString());
       }
-    });
-    return () => {
-      testRef.off('value', listener);
     };
-  }, []);
 
-  const handleTestConnection = () => {
+    testRef.on('value', onTestChange);
+    return () => testRef.off('value', onTestChange);
+  }, [rtdb]);
+
+  // Test Connection Handler
+  const handleTestConnection = async () => {
+    if (!rtdb) {
+      setTestLastPing('Firebase 尚未初始化');
+      return;
+    }
+
     setIsTesting(true);
-    db.ref('_connection_test').set({
-      timestamp: Date.now(),
-      message: 'Hello Firebase!'
-    }).then(() => {
+    const testRef = rtdb.ref('_connection_test');
+    
+    try {
+      await testRef.set({
+        timestamp: Date.now(),
+        message: 'Hello Firebase!',
+      });
       setTimeout(() => setIsTesting(false), 500);
-    }).catch((err) => {
-      console.error(err);
+    } catch (err) {
+      console.error("Firebase RTDB Test Connection Error:", err);
       setTestLastPing('連線失敗，請檢查 Console');
       setIsTesting(false);
-    });
+    }
   };
 
   const handleMonthChange = (increment: number) => {
     const currentDate = new Date(localSettings.year, localSettings.month);
     const newDate = increment > 0 ? addMonths(currentDate, 1) : subMonths(currentDate, 1);
     
-    // Reset quotas when month changes as days shift
-    setLocalSettings(prev => ({
-      ...prev,
+    const newSettings = {
+      ...localSettings,
       year: newDate.getFullYear(),
       month: newDate.getMonth(),
       dailyQuotas: {} 
-    }));
+    };
+    setLocalSettings(newSettings);
+    onSaveSettings(newSettings);
   };
 
   const handleAddMember = () => {
     if (newMemberName.trim() && !localSettings.members.includes(newMemberName.trim())) {
-      setLocalSettings(prev => ({
-        ...prev,
-        members: [...prev.members, newMemberName.trim()]
-      }));
+      const newSettings = {
+        ...localSettings,
+        members: [...localSettings.members, newMemberName.trim()]
+      };
+      setLocalSettings(newSettings);
+      onSaveSettings(newSettings);
       setNewMemberName('');
     }
   };
 
   const handleRemoveMember = (name: string) => {
-    setLocalSettings(prev => ({
-      ...prev,
-      members: prev.members.filter(m => m !== name)
-    }));
+    const newSettings = {
+      ...localSettings,
+      members: localSettings.members.filter(m => m !== name)
+    };
+    setLocalSettings(newSettings);
+    onSaveSettings(newSettings);
   };
 
   const handleSetPattern = (day: 1 | 2) => {
@@ -131,27 +154,26 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
     const targetDate = day === 1 ? currentMonthStart : addDays(currentMonthStart, 1);
     const dateStr = format(targetDate, 'yyyy-MM-dd');
     
-    setLocalSettings(prev => ({
-        ...prev,
-        firstWorkDay: dateStr,
-        dailyQuotas: {} // Reset quotas if pattern changes to avoid mismatch
-    }));
+    const newSettings = {
+      ...localSettings,
+      firstWorkDay: dateStr,
+      dailyQuotas: {}
+    };
+    setLocalSettings(newSettings);
+    onSaveSettings(newSettings);
   };
 
-  // Helper to check work day
   const isWorkDay = (date: Date) => {
-    if (!localSettings.firstWorkDay) return true; // Default to all days active if not set
+    if (!localSettings.firstWorkDay) return true;
     const firstWork = parseISO(localSettings.firstWorkDay);
     const diff = differenceInCalendarDays(date, firstWork);
     return diff % 2 === 0;
   };
 
-  // Calendar Generation
   const monthStart = startOfMonth(new Date(localSettings.year, localSettings.month));
   const monthEnd = endOfMonth(monthStart);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-  // Bulk Quota Setting
   const handleBulkSet = (quota: number) => {
     if (!localSettings.firstWorkDay) return;
 
@@ -168,10 +190,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
       }
     });
 
-    setLocalSettings(prev => ({
-      ...prev,
+    const newSettings = {
+      ...localSettings,
       dailyQuotas: newQuotas
-    }));
+    };
+    setLocalSettings(newSettings);
+    onSaveSettings(newSettings);
   };
 
   const applyBulkQuota = () => {
@@ -181,7 +205,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
     }
   };
 
-  // Single Day Edit Handler
   const handleDayClick = (dateStr: string, currentQuota: number) => {
     setEditingDate(dateStr);
     setSingleQuotaValue(currentQuota > 0 ? currentQuota.toString() : '');
@@ -199,19 +222,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
       newQuotas[editingDate] = val;
     }
 
-    setLocalSettings(prev => ({ ...prev, dailyQuotas: newQuotas }));
+    const newSettings = { ...localSettings, dailyQuotas: newQuotas };
+    setLocalSettings(newSettings);
+    onSaveSettings(newSettings);
     setEditingDate(null);
     setSingleQuotaValue('');
   };
 
-  // Determine active pattern for UI
   const hasSetting = !!localSettings.firstWorkDay;
   const activePattern = !hasSetting ? null : (isWorkDay(monthStart) ? 1 : 2);
-
-  // Sync to parent
-  useEffect(() => {
-    onSaveSettings(localSettings);
-  }, [localSettings, onSaveSettings]);
 
   return (
     <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
@@ -250,14 +269,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
                     onClick={() => handleSetPattern(1)}
                     className={`relative py-3 px-2 rounded-lg border-2 text-center transition-all flex flex-col items-center justify-center ${
                       activePattern === 1
-                        ? 'bg-blue-50 border-primary text-primary' 
+                        ? 'bg-blue-50 border-blue-600 text-blue-600' 
                         : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                     }`}
                   >
                     <span className="text-xl font-bold">1號</span>
                     <span className="text-xs mt-1 opacity-80">基數日上班</span>
                     {activePattern === 1 && (
-                      <div className="absolute top-2 right-2 text-primary">
+                      <div className="absolute top-2 right-2 text-blue-600">
                         <CheckCircle2 className="w-4 h-4" />
                       </div>
                     )}
@@ -267,23 +286,19 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
                     onClick={() => handleSetPattern(2)}
                     className={`relative py-3 px-2 rounded-lg border-2 text-center transition-all flex flex-col items-center justify-center ${
                       activePattern === 2
-                        ? 'bg-blue-50 border-primary text-primary' 
+                        ? 'bg-blue-50 border-blue-600 text-blue-600' 
                         : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'
                     }`}
                   >
                     <span className="text-xl font-bold">2號</span>
                     <span className="text-xs mt-1 opacity-80">偶數日上班</span>
                     {activePattern === 2 && (
-                      <div className="absolute top-2 right-2 text-primary">
+                      <div className="absolute top-2 right-2 text-blue-600">
                         <CheckCircle2 className="w-4 h-4" />
                       </div>
                     )}
                   </button>
                 </div>
-                
-                <p className="mt-3 text-xs text-gray-500">
-                  設定當月1號或2號為上班起始日，系統將自動以「上一休一」推算整個月的班表。
-                </p>
               </div>
             </div>
           </div>
@@ -292,10 +307,9 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
           <div className="bg-white shadow rounded-lg p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold text-gray-900 flex items-center">
-                <Users className="w-5 h-5 mr-2 text-primary" />
+                <Users className="w-5 h-5 mr-2 text-blue-600" />
                 團隊人員 ({localSettings.members.length})
               </h2>
-              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">自動儲存</span>
             </div>
             
             <div className="flex space-x-2 mb-4">
@@ -305,12 +319,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
                 value={newMemberName}
                 onChange={(e) => setNewMemberName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddMember()}
-                className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 border p-2 text-sm"
+                className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-600 focus:ring focus:ring-blue-600 focus:ring-opacity-50 border p-2 text-sm"
               />
               <button
                 onClick={handleAddMember}
                 disabled={!newMemberName.trim()}
-                className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-primary hover:bg-blue-600 focus:outline-none disabled:opacity-50"
+                className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50 transition-colors"
               >
                 <Plus className="w-4 h-4" />
               </button>
@@ -323,7 +337,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
               {localSettings.members.map(member => (
                 <div key={member} className="flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-100">
                   <span className="text-gray-800 font-medium">{member}</span>
-                  <button onClick={() => handleRemoveMember(member)} className="text-gray-400 hover:text-danger transition-colors">
+                  <button onClick={() => handleRemoveMember(member)} className="text-gray-400 hover:text-red-500 transition-colors">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -334,7 +348,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
           {/* 3. Database Connection Test */}
           <div className="bg-white shadow rounded-lg p-6 border border-blue-100">
             <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-              <Activity className="w-5 h-5 mr-2 text-primary" />
+              <Activity className="w-5 h-5 mr-2 text-blue-600" />
               系統連線測試
             </h2>
             <div className="bg-slate-50 p-4 rounded-lg">
@@ -344,18 +358,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
                 </span>
                 <button
                   onClick={handleTestConnection}
-                  disabled={isTesting}
-                  className="px-3 py-1 bg-white border border-slate-300 rounded text-xs hover:bg-slate-100 active:bg-slate-200 transition-colors"
+                  disabled={isTesting || !rtdb}
+                  className="px-3 py-1 bg-white border border-slate-300 rounded text-xs hover:bg-slate-100 active:bg-slate-200 transition-colors disabled:opacity-50"
                 >
-                  {isTesting ? '發送中...' : '發送測試訊號'}
+                  {isTesting ? <Loader2 className="w-4 h-4 animate-spin inline-block mr-1" /> : '發送測試訊號'}
                 </button>
               </div>
               <div className="text-xs text-slate-500 font-mono bg-white p-2 rounded border border-slate-200">
                 最後接收: {testLastPing}
               </div>
-              <p className="text-[10px] text-slate-400 mt-2">
-                * 點擊測試後，若「最後接收」時間更新，代表 Firebase 讀寫功能正常。
-              </p>
             </div>
           </div>
 
@@ -368,14 +379,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
               <h2 className="text-lg font-bold text-gray-900">
                 可休人數配額設定
               </h2>
-              <div className="flex items-center space-x-4 text-xs text-gray-500 hidden sm:flex">
-                <span className="flex items-center"><span className="w-3 h-3 bg-green-100 border border-green-300 mr-1"></span> 整數 (一般)</span>
-                <span className="flex items-center"><span className="w-3 h-3 bg-yellow-100 border border-yellow-300 mr-1"></span> 非整數 (外宿)</span>
-              </div>
             </div>
 
             {!localSettings.firstWorkDay ? (
-              <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-4">
+              <div className="bg-amber-50 border-l-4 border-amber-400 p-4 mb-4 rounded-md">
                 <div className="flex">
                   <div className="flex-shrink-0">
                     <AlertTriangle className="h-5 w-5 text-amber-400" aria-hidden="true" />
@@ -390,7 +397,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
             ) : (
               <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
                 <h3 className="text-sm font-bold text-slate-800 mb-3 flex items-center">
-                  <Sliders className="w-4 h-4 mr-2 text-primary" />
+                  <Sliders className="w-4 h-4 mr-2 text-blue-600" />
                   批量配額設定
                 </h3>
                 <div className="flex flex-col sm:flex-row gap-3 items-end sm:items-center">
@@ -402,14 +409,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
                       step="0.5"
                       value={bulkQuotaValue}
                       onChange={(e) => setBulkQuotaValue(e.target.value)}
-                      className="block w-full w-32 rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50 text-sm p-2 border"
+                      className="block w-full w-32 rounded-md border-gray-300 shadow-sm focus:border-blue-600 focus:ring focus:ring-blue-600 focus:ring-opacity-50 text-sm p-2 border"
                       placeholder="例如: 2"
                     />
                   </div>
                   <div className="flex gap-2 w-full sm:w-auto">
                     <button
                       onClick={applyBulkQuota}
-                      className="flex-1 sm:flex-none inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary hover:bg-blue-600 focus:outline-none transition-colors"
+                      className="flex-1 sm:flex-none inline-flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none transition-colors"
                     >
                       套用至本月上班日
                     </button>
@@ -422,19 +429,13 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
                     </button>
                   </div>
                 </div>
-                <p className="text-xs text-slate-400 mt-2">
-                  * 批量設定：輸入數值後點擊套用，將自動覆蓋本月所有上班日的配額。
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  * 單日修改：直接點擊下方月曆上的日期即可單獨修改該日配額。
-                </p>
               </div>
             )}
 
             <div className="flex-1 min-h-[500px]">
               <div className="grid grid-cols-7 gap-px bg-gray-200 border border-gray-200 rounded-lg overflow-hidden h-full">
                 {/* Headers */}
-                {WEEKDAYS.map((day) => (
+                {['日', '一', '二', '三', '四', '五', '六'].map((day) => (
                   <div key={day} className="bg-gray-100 py-2 text-center text-sm font-semibold text-gray-700">
                     {day}
                   </div>
@@ -449,19 +450,25 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
                   
                   // Style logic based on quota
                   let bgClass = "bg-white";
-                  if (!workDay) bgClass = "bg-slate-100 cursor-not-allowed";
-                  else if (isFraction) bgClass = "bg-yellow-50 hover:bg-yellow-100 cursor-pointer";
-                  else if (quota && quota > 0) bgClass = "bg-green-50 hover:bg-green-100 cursor-pointer";
-                  else bgClass = "bg-white hover:bg-gray-50 cursor-pointer";
+                  let hoverClass = "";
+                  if (!workDay) {
+                    bgClass = "bg-slate-100 cursor-not-allowed";
+                  } else {
+                    hoverClass = "cursor-pointer transition-colors";
+                    if (isFraction) bgClass = "bg-yellow-50 hover:bg-yellow-100";
+                    else if (quota && quota > 0) bgClass = "bg-green-50 hover:bg-green-100";
+                    else bgClass = "bg-white hover:bg-gray-50";
+                  }
 
-                  const colSpanStyle = dayIdx === 0 ? { gridColumnStart: getDay(day) + 1 } : {};
+                  const colStart = getDay(day);
+                  const colSpanStyle = dayIdx === 0 ? { gridColumnStart: colStart === 0 ? 7 : colStart + 1 } : {};
 
                   return (
                     <div
                       key={dateStr}
                       style={colSpanStyle}
                       onClick={() => localSettings.firstWorkDay && workDay && handleDayClick(dateStr, quota || 0)}
-                      className={`${bgClass} p-2 transition-colors relative flex flex-col justify-between select-none`}
+                      className={`${bgClass} ${hoverClass} p-2 relative flex flex-col justify-between select-none min-h-[80px]`}
                     >
                       <span className={`text-sm ${!workDay ? 'text-gray-400' : 'text-gray-900 font-medium'}`}>
                         {format(day, 'd')}
@@ -469,7 +476,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
                       
                       {!workDay ? (
                         <div className="flex-1 flex items-center justify-center">
-                           <span className="text-4xl font-black text-slate-300">O</span>
+                           <span className="text-4xl font-black text-slate-300 opacity-50">休</span>
                         </div>
                       ) : (
                         <div className="flex-1 flex flex-col items-center justify-center">
@@ -478,7 +485,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
                               {quota}
                             </span>
                           ) : (
-                            <span className="text-xs text-gray-300">無配額</span>
+                            <span className="text-xs text-gray-300">設定配額</span>
                           )}
                         </div>
                       )}
@@ -520,14 +527,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
                           value={singleQuotaValue}
                           onChange={(e) => setSingleQuotaValue(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && saveSingleQuota()}
-                          className="shadow-sm focus:ring-primary focus:border-primary block w-full sm:text-lg border-gray-300 rounded-md p-3 border"
+                          className="shadow-sm focus:ring-blue-600 focus:border-blue-600 block w-full sm:text-lg border-gray-300 rounded-md p-3 border"
                           placeholder="請輸入數字"
                         />
                          <p className="text-xs text-gray-500 mt-2">
-                           * 輸入 0 或留空代表刪除配額。<br/>
-                           * 整數：可排所有假別。<br/>
-                           * 非整數(如0.5)：僅可排「外宿」。
-                         </p>
+                            * 輸入 0 或留空代表清除配額。<br/>
+                            * 整數：可排所有假別。<br/>
+                            * 非整數(如0.5)：通常用於表示特殊假別，例如外宿配額。
+                           </p>
                       </div>
                     </div>
                   </div>
@@ -537,14 +544,14 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings })
                 <button
                   type="button"
                   onClick={saveSingleQuota}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary text-base font-medium text-white hover:bg-blue-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none sm:ml-3 sm:w-auto sm:text-sm transition-colors"
                 >
                   <Save className="w-4 h-4 mr-2" />
                   儲存
                 </button>
                 <button
                   type="button"
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:text-gray-500 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:text-gray-500 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm transition-colors"
                   onClick={() => setEditingDate(null)}
                 >
                   取消
