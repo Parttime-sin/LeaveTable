@@ -28,10 +28,10 @@ const App: React.FC = () => {
       try {
         const parsed = JSON.parse(stored);
         // Merge with defaults to ensure structure integrity
-        setData(prev => ({
+        setData({
           settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
           leaves: parsed.leaves || []
-        }));
+        });
       } catch (e) {
         console.error("Failed to parse local storage", e);
       }
