@@ -3,8 +3,7 @@ import Navbar from './components/Navbar';
 import SettingsPage from './pages/SettingsPage';
 import FillingPage from './pages/FillingPage';
 import { AppSettings, LeaveEntry, AppState, PageView } from './types';
-import { db } from './firebase';
-import { ref, onValue, set } from 'firebase/database';
+import { STORAGE_KEY } from './constants';
 
 const DEFAULT_SETTINGS: AppSettings = {
   year: new Date().getFullYear(),
@@ -22,51 +21,39 @@ const App: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
 
-  // Initialize Firebase Listeners
+  // Initialize from LocalStorage
   useEffect(() => {
-    setLoading(true);
-    const settingsRef = ref(db, 'settings');
-    const leavesRef = ref(db, 'leaves');
-
-    // Listener for Settings updates
-    const unsubscribeSettings = onValue(settingsRef, (snapshot) => {
-      const val = snapshot.val();
-      if (val) {
-        setData(prev => ({ ...prev, settings: { ...DEFAULT_SETTINGS, ...val } }));
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        // Merge with defaults to ensure structure integrity
+        setData(prev => ({
+          settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
+          leaves: parsed.leaves || []
+        }));
+      } catch (e) {
+        console.error("Failed to parse local storage", e);
       }
-    });
-
-    // Listener for Leaves updates
-    const unsubscribeLeaves = onValue(leavesRef, (snapshot) => {
-      const val = snapshot.val();
-      // Handle both array and object formats from Firebase
-      const leavesData = val ? (Array.isArray(val) ? val : Object.values(val)) : [];
-      setData(prev => ({ ...prev, leaves: leavesData as LeaveEntry[] }));
-      setLoading(false);
-    });
-
-    return () => {
-      unsubscribeSettings();
-      unsubscribeLeaves();
-    };
+    }
+    setLoading(false);
   }, []);
 
+  const saveData = (newData: AppState) => {
+    setData(newData);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
+  };
+
   const handleSaveSettings = (newSettings: AppSettings) => {
-    // Write settings to Firebase
-    set(ref(db, 'settings'), newSettings)
-      .then(() => console.log("設定已儲存至 Firebase"))
-      .catch((err) => console.error("設定儲存失敗", err));
+    const newState = { ...data, settings: newSettings };
+    saveData(newState);
+    console.log("設定已儲存至 LocalStorage");
   };
 
   const handleSaveLeaves = (newLeaves: LeaveEntry[]) => {
-    // Write leaves to Firebase
-    set(ref(db, 'leaves'), newLeaves)
-      .then(() => {
-        console.log("資料寫入成功");
-        // Note: The form inputs in FillingPage are cleared upon adding to the list.
-        // The list itself is synchronized with Firebase via onValue above.
-      })
-      .catch((err) => console.error("資料寫入失敗", err));
+    const newState = { ...data, leaves: newLeaves };
+    saveData(newState);
+    console.log("資料寫入成功 (LocalStorage)");
   };
 
   if (loading) {

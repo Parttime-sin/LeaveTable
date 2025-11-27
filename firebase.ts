@@ -1,17 +1,1 @@
-import { initializeApp } from "firebase/app";
-import { getDatabase } from "firebase/database";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyBmo7Sla5tT5x3M0Y_wRxgm3YTA79YfdRw",
-  authDomain: "leavetabledatabase.firebaseapp.com",
-  databaseURL: "https://leavetabledatabase-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "leavetabledatabase",
-  storageBucket: "leavetabledatabase.firebasestorage.app",
-  messagingSenderId: "1041146346576",
-  appId: "1:1041146346576:web:38c4e617323b13d3c0a555",
-  measurementId: "G-VEB8V17591"
-};
-
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-export const db = getDatabase(app);
+// This file is no longer used.

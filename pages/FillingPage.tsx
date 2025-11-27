@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { AppSettings, LeaveEntry, LeaveType } from '../types';
-import { WEEKDAYS, FULL_DAY_LEAVES, HALF_DAY_LEAVES, ALL_LEAVES } from '../constants';
-import { Save, AlertCircle, Plus, X, Share2, Info } from 'lucide-react';
+import { WEEKDAYS, FULL_DAY_LEAVES, ALL_LEAVES } from '../constants';
+import { Save, AlertCircle, Plus, X, Share2 } from 'lucide-react';
 
 // Local date helpers to replace date-fns
 const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
