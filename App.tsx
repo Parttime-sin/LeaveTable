@@ -1,10 +1,10 @@
-
 import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import SettingsPage from './pages/SettingsPage';
 import FillingPage from './pages/FillingPage';
 import { AppSettings, LeaveEntry, AppState, PageView } from './types';
-import { STORAGE_KEY } from './constants';
+import { db } from './firebase';
+import { ref, onValue, set } from 'firebase/database';
 
 const DEFAULT_SETTINGS: AppSettings = {
   year: new Date().getFullYear(),
@@ -22,42 +22,51 @@ const App: React.FC = () => {
   });
   const [loading, setLoading] = useState(true);
 
-  // Load from LocalStorage on mount
+  // Initialize Firebase Listeners
   useEffect(() => {
     setLoading(true);
-    const savedData = localStorage.getItem(STORAGE_KEY);
-    if (savedData) {
-      try {
-        const parsed = JSON.parse(savedData);
-        if (parsed) {
-          setData({
-            settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
-            leaves: Array.isArray(parsed.leaves) ? parsed.leaves : []
-          });
-        }
-      } catch (error) {
-        console.error("Failed to load local data", error);
+    const settingsRef = ref(db, 'settings');
+    const leavesRef = ref(db, 'leaves');
+
+    // Listener for Settings updates
+    const unsubscribeSettings = onValue(settingsRef, (snapshot) => {
+      const val = snapshot.val();
+      if (val) {
+        setData(prev => ({ ...prev, settings: { ...DEFAULT_SETTINGS, ...val } }));
       }
-    }
-    setLoading(false);
+    });
+
+    // Listener for Leaves updates
+    const unsubscribeLeaves = onValue(leavesRef, (snapshot) => {
+      const val = snapshot.val();
+      // Handle both array and object formats from Firebase
+      const leavesData = val ? (Array.isArray(val) ? val : Object.values(val)) : [];
+      setData(prev => ({ ...prev, leaves: leavesData as LeaveEntry[] }));
+      setLoading(false);
+    });
+
+    return () => {
+      unsubscribeSettings();
+      unsubscribeLeaves();
+    };
   }, []);
 
-  // Helper to save entire state to LocalStorage
-  const persistData = (newState: AppState) => {
-    setData(newState);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
-  };
-
   const handleSaveSettings = (newSettings: AppSettings) => {
-    const newState = { ...data, settings: newSettings };
-    persistData(newState);
-    console.log("設定已儲存至 LocalStorage");
+    // Write settings to Firebase
+    set(ref(db, 'settings'), newSettings)
+      .then(() => console.log("設定已儲存至 Firebase"))
+      .catch((err) => console.error("設定儲存失敗", err));
   };
 
   const handleSaveLeaves = (newLeaves: LeaveEntry[]) => {
-    const newState = { ...data, leaves: newLeaves };
-    persistData(newState);
-    console.log("資料已儲存至 LocalStorage");
+    // Write leaves to Firebase
+    set(ref(db, 'leaves'), newLeaves)
+      .then(() => {
+        console.log("資料寫入成功");
+        // Note: The form inputs in FillingPage are cleared upon adding to the list.
+        // The list itself is synchronized with Firebase via onValue above.
+      })
+      .catch((err) => console.error("資料寫入失敗", err));
   };
 
   if (loading) {
