@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { Users, Calendar, AlertTriangle, Plus, Trash2, ArrowLeft, ArrowRight, CheckCircle2, Sliders, Eraser, Save, Activity, Wifi, Loader2 } from 'lucide-react';
+import { Users, Calendar, AlertTriangle, Plus, Trash2, ArrowLeft, ArrowRight, CheckCircle2, Sliders, Eraser, Save } from 'lucide-react';
 import { AppSettings } from '../types';
 
 // --- Local Date Helpers ---
@@ -50,11 +51,10 @@ const addDays = (date: Date, amount: number) => {
 
 interface SettingsPageProps {
   settings: AppSettings;
-  rtdb: any; // Realtime Database instance
   onSaveSettings: (newSettings: AppSettings) => void;
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ settings, rtdb, onSaveSettings }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ settings, onSaveSettings }) => {
   const [localSettings, setLocalSettings] = useState<AppSettings>(settings);
   const [newMemberName, setNewMemberName] = useState('');
   
@@ -65,54 +65,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, rtdb, onSaveSetti
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [singleQuotaValue, setSingleQuotaValue] = useState<string>('');
 
-  // Test Connection State
-  const [testLastPing, setTestLastPing] = useState<string>('等待測試...');
-  const [isTesting, setIsTesting] = useState(false);
-
-  // Sync props to local state when props change (e.g. initial load from DB)
+  // Sync props to local state when props change
   useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
-
-  // Listen for test connection changes (Legacy/v8 RTDB)
-  useEffect(() => {
-    if (!rtdb) return;
-
-    const testRef = rtdb.ref('_connection_test');
-    
-    const onTestChange = (snapshot: any) => {
-      const val = snapshot.val();
-      if (val && val.timestamp) {
-        setTestLastPing(new Date(val.timestamp).toLocaleString());
-      }
-    };
-
-    testRef.on('value', onTestChange);
-    return () => testRef.off('value', onTestChange);
-  }, [rtdb]);
-
-  // Test Connection Handler
-  const handleTestConnection = async () => {
-    if (!rtdb) {
-      setTestLastPing('Firebase 尚未初始化');
-      return;
-    }
-
-    setIsTesting(true);
-    const testRef = rtdb.ref('_connection_test');
-    
-    try {
-      await testRef.set({
-        timestamp: Date.now(),
-        message: 'Hello Firebase!',
-      });
-      setTimeout(() => setIsTesting(false), 500);
-    } catch (err) {
-      console.error("Firebase RTDB Test Connection Error:", err);
-      setTestLastPing('連線失敗，請檢查 Console');
-      setIsTesting(false);
-    }
-  };
 
   const handleMonthChange = (increment: number) => {
     const currentDate = new Date(localSettings.year, localSettings.month);
@@ -342,31 +298,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ settings, rtdb, onSaveSetti
                   </button>
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* 3. Database Connection Test */}
-          <div className="bg-white shadow rounded-lg p-6 border border-blue-100">
-            <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center">
-              <Activity className="w-5 h-5 mr-2 text-blue-600" />
-              系統連線測試
-            </h2>
-            <div className="bg-slate-50 p-4 rounded-lg">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm text-slate-600 flex items-center">
-                  <Wifi className="w-4 h-4 mr-1" /> 資料庫回應
-                </span>
-                <button
-                  onClick={handleTestConnection}
-                  disabled={isTesting || !rtdb}
-                  className="px-3 py-1 bg-white border border-slate-300 rounded text-xs hover:bg-slate-100 active:bg-slate-200 transition-colors disabled:opacity-50"
-                >
-                  {isTesting ? <Loader2 className="w-4 h-4 animate-spin inline-block mr-1" /> : '發送測試訊號'}
-                </button>
-              </div>
-              <div className="text-xs text-slate-500 font-mono bg-white p-2 rounded border border-slate-200">
-                最後接收: {testLastPing}
-              </div>
             </div>
           </div>
 
