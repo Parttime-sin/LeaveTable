@@ -128,8 +128,26 @@ const App: React.FC = () => {
     try {
       await loginWithGoogle();
       // Auth listener will handle state update
-    } catch (error) {
-      alert("登入失敗，請重試。");
+    } catch (error: any) {
+      console.error("Detailed Login Error:", error);
+      let msg = "登入失敗，請重試。";
+      
+      // Parse specific Firebase Auth errors
+      if (error.code === 'auth/popup-closed-by-user') {
+        msg = "登入視窗已被關閉，請再試一次。";
+      } else if (error.code === 'auth/cancelled-popup-request') {
+         msg = "已有一個登入視窗開啟中，請關閉後重試。";
+      } else if (error.code === 'auth/unauthorized-domain') {
+        msg = `網域未授權 (${window.location.hostname})。\n請至 Firebase Console > Authentication > Settings > Authorized Domains 新增此網域。`;
+      } else if (error.code === 'auth/operation-not-allowed') {
+        msg = "Google 登入功能尚未啟用。\n請至 Firebase Console > Authentication > Sign-in method 啟用 Google 提供者。";
+      } else if (error.code === 'auth/api-key-not-valid') {
+        msg = "API Key 設定錯誤，請檢查 .env 檔案。";
+      } else if (error.message) {
+        msg = `登入發生錯誤 (${error.code || 'unknown'}): ${error.message}`;
+      }
+      
+      alert(msg);
     } finally {
       setLoginLoading(false);
     }
