@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import SettingsPage from './pages/SettingsPage';
 import FillingPage from './pages/FillingPage';
+import LoginPage from './components/LoginPage';
 import { AppSettings, LeaveEntry, AppState, PageView } from './types';
 import { STORAGE_KEY } from './constants';
-import { isFirebaseEnabled, subscribeToData, saveDataToFirebase } from './firebase';
+import { isFirebaseEnabled, subscribeToData, saveDataToFirebase, auth, loginWithGoogle, logout } from './firebase';
+import { User } from 'firebase/auth';
 
 const DEFAULT_SETTINGS: AppSettings = {
   year: new Date().getFullYear(),
@@ -20,15 +22,46 @@ const App: React.FC = () => {
     settings: DEFAULT_SETTINGS,
     leaves: []
   });
-  const [loading, setLoading] = useState(true);
+  
+  // Auth State
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [loginLoading, setLoginLoading] = useState(false);
+
+  // Data Loading State
+  const [dataLoading, setDataLoading] = useState(true);
   const [isFirebaseReady, setIsFirebaseReady] = useState(false);
   
   // Ref to prevent saving loop when receiving updates from Firebase
   const isRemoteUpdate = useRef(false);
 
+  // 1. Initialize Firebase availability check
+  useEffect(() => {
+    setIsFirebaseReady(isFirebaseEnabled());
+  }, []);
+
+  // 2. Auth Listener
+  useEffect(() => {
+    if (isFirebaseEnabled() && auth) {
+      const unsubscribe = auth.onAuthStateChanged((u) => {
+        setUser(u);
+        setAuthLoading(false);
+      });
+      return () => unsubscribe();
+    } else {
+      // Local mode or firebase not configured
+      setAuthLoading(false);
+    }
+  }, []);
+
+  // 3. Data Subscription (Depends on Auth)
   useEffect(() => {
     const firebaseEnabled = isFirebaseEnabled();
-    setIsFirebaseReady(firebaseEnabled);
+    
+    // If Firebase is enabled but user is not logged in, do not subscribe yet (wait for login)
+    if (firebaseEnabled && !user) {
+      return; 
+    }
 
     if (firebaseEnabled) {
       // --- Firebase Mode ---
@@ -60,15 +93,13 @@ const App: React.FC = () => {
               } catch (e) {
                 console.error("Local storage parse error during migration", e);
               }
-            } else {
-              setLoading(false); // No data anywhere, just stop loading
             }
           }
-          setLoading(false);
+          setDataLoading(false);
         },
         (error) => {
           console.error("Firebase subscription error, falling back to local", error);
-          setLoading(false);
+          setDataLoading(false);
         }
       );
 
@@ -88,9 +119,28 @@ const App: React.FC = () => {
           console.error("Failed to parse local storage", e);
         }
       }
-      setLoading(false);
+      setDataLoading(false);
     }
-  }, []);
+  }, [user]); // Re-run when user logs in
+
+  const handleLogin = async () => {
+    setLoginLoading(true);
+    try {
+      await loginWithGoogle();
+      // Auth listener will handle state update
+    } catch (error) {
+      alert("登入失敗，請重試。");
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (window.confirm("確定要登出嗎？")) {
+      await logout();
+      setDataLoading(true); // Reset loading for next login
+    }
+  };
 
   const saveData = async (newData: AppState) => {
     setData(newData);
@@ -100,12 +150,16 @@ const App: React.FC = () => {
 
     // If Firebase is active and this is NOT a remote update, push to cloud
     if (isFirebaseReady && !isRemoteUpdate.current) {
+      if (!user) {
+        console.warn("User not logged in, cannot save to Firebase");
+        return;
+      }
       try {
         await saveDataToFirebase(newData);
         console.log("Data synced to Firebase");
       } catch (e) {
         console.error("Failed to sync to Firebase", e);
-        alert("無法同步至雲端，資料僅儲存於本機。");
+        alert("無法同步至雲端 (可能無寫入權限)。");
       }
     }
   };
@@ -120,7 +174,23 @@ const App: React.FC = () => {
     saveData(newState);
   };
 
-  if (loading) {
+  // 1. Show global loading if Auth is checking
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-slate-50 flex-col gap-4">
+         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
+         <div className="text-slate-500 text-sm">驗證身分中...</div>
+      </div>
+    );
+  }
+
+  // 2. If Firebase is enabled but NO user -> Login Page
+  if (isFirebaseReady && !user) {
+    return <LoginPage onLogin={handleLogin} loading={loginLoading} />;
+  }
+
+  // 3. Main App Loading (Data Fetching)
+  if (dataLoading) {
       return (
           <div className="flex items-center justify-center h-screen bg-slate-50 flex-col gap-4">
              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -135,6 +205,8 @@ const App: React.FC = () => {
         currentPage={page} 
         onNavigate={setPage} 
         isFirebaseConnected={isFirebaseReady}
+        user={user}
+        onLogout={handleLogout}
       />
       
       <main className="max-w-7xl mx-auto px-4 py-8">
@@ -174,7 +246,7 @@ const App: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 text-center text-slate-500 text-sm">
           <p>© {new Date().getFullYear()} 團隊假表管理系統</p>
           <p className="mt-1 text-xs text-slate-400">
-            {isFirebaseReady ? 'Cloud Mode (Firebase)' : 'Local Mode (Browser Storage)'}
+            {isFirebaseReady ? `Cloud Mode (Google Auth: ${user?.displayName || 'Unknown'})` : 'Local Mode (Browser Storage)'}
           </p>
         </div>
       </footer>

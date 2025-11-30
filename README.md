@@ -1,9 +1,10 @@
 # 團隊假表管理系統 (LeaveTable)
 
-專為特殊輪班制（如「做一休一」）團隊設計的線上假表協作系統。支援每日休假名額控管、多種假別設定、即時雲端同步以及響應式網頁設計。
+專為特殊輪班制（如「做一休一」）團隊設計的線上假表協作系統。支援每日休假名額控管、多種假別設定、Google 身分驗證、即時雲端同步以及響應式網頁設計。
 
 ## ✨ 功能特色
 
+*   **安全身分驗證**：整合 Google 登入機制，確保僅有授權人員可存取與編輯假表（雲端模式）。
 *   **輪班模式支援**：內建單/雙日輪班邏輯計算，自動標示上班日與休假日。
 *   **彈性配額管理**：
     *   可設定每日可休人數上限。
@@ -13,22 +14,26 @@
     *   全日假：特休 (1-3)、補休 (1-4)、年休 (1-4)。
     *   半日假：外宿。
 *   **即時協作 (Firebase)**：支援多人同時在線編輯，資料即時同步更新。
-*   **離線/本機模式**：若未設定 Firebase，系統會自動切換至 LocalStorage 模式，將資料儲存於瀏覽器端。
+*   **離線/本機模式**：若未設定 Firebase，系統會自動切換至 LocalStorage 模式，無需登入即可試用（資料僅存於瀏覽器）。
 *   **RWD 響應式設計**：針對手機操作優化，支援表格橫向捲動與直覺的點擊填寫。
 
 ## 🛠️ 技術棧
 
-*   **核心框架**: [React 18/19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
+*   **核心框架**: [React 18](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
 *   **建置工具**: [Vite](https://vitejs.dev/)
 *   **樣式庫**: [Tailwind CSS](https://tailwindcss.com/) (CDN 載入)
 *   **圖示庫**: [Lucide React](https://lucide.dev/)
 *   **後端/資料庫**: [Firebase Firestore](https://firebase.google.com/)
+*   **身分驗證**: [Firebase Authentication](https://firebase.google.com/docs/auth)
 
 ## 🚀 快速開始
 
 ### 1. 安裝相依套件
 
+**重要**：若出現 `sh: 1: vite: not found` 或 `Failed to resolve entry for package "react-dom"` 錯誤，請執行以下指令重新安裝依賴：
+
 ```bash
+rm -rf node_modules package-lock.json
 npm install
 ```
 
@@ -50,7 +55,7 @@ npm run build
 
 ### 系統初始化流程
 
-首次進入系統時，請依序執行以下步驟：
+首次進入系統時，若已連結 Firebase，請先**使用 Google 帳號登入**。登入後請依序執行以下步驟：
 
 1.  點擊導覽列的 **「配額設定」**。
 2.  **新增團隊人員**：在左側面板輸入姓名並新增。
@@ -68,14 +73,15 @@ npm run build
 1.  前往 [Firebase Console](https://console.firebase.google.com/) 建立新專案。
 2.  新增一個 Web App。
 3.  建立 **Cloud Firestore** 資料庫（建議以測試模式開始，或自行設定安全性規則）。
-4.  複製 Firebase SDK 的設定物件 (`firebaseConfig`)。
-5.  開啟專案中的 `firebase.ts` 檔案，替換 `firebaseConfig` 內容：
+4.  開啟 **Authentication** 功能，並啟用 **Google** 登入提供者 (Sign-in provider)。
+5.  複製 Firebase SDK 的設定物件 (`firebaseConfig`)。
+6.  開啟專案中的 `firebase.ts` 檔案，替換 `firebaseConfig` 內容 (或使用環境變數)。
 
-
-**注意**：若 `firebase.ts` 中的設定無效或連線失敗，系統會自動降級為本機模式 (Local Mode)，資料僅會儲存在操作者的瀏覽器中。
+**注意**：若 `firebase.ts` 中的設定無效或連線失敗，系統會自動降級為本機模式 (Local Mode)，此模式下**無需登入**，但資料僅會儲存在操作者的瀏覽器中。
 
 ## 📱 操作邏輯
 
+*   **登入權限**：在雲端模式下，必須登入 Google 帳號才能查看或編輯假表。
 *   **一般假別**：當日配額為整數（如 1, 2）時，可選擇所有全日假別。
 *   **外宿 (半日)**：若當日配額含有小數（如 0.5, 1.5），或配額允許時，系統會開放選擇「外宿」。
 *   **衝突檢測**：填寫頁面會即時顯示當日已填寫人數與配額上限，若超額將以紅色警示顯示。

@@ -1,5 +1,6 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getFirestore, doc, onSnapshot, setDoc, Firestore } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, Auth, User } from 'firebase/auth';
 import { getAnalytics } from 'firebase/analytics';
 import { AppState } from './types';
 
@@ -24,6 +25,7 @@ const firebaseConfig = {
 
 let app: FirebaseApp;
 let db: Firestore | null = null;
+let auth: Auth | null = null;
 let isConfigured = false;
 
 // Basic validation to ensure keys exist
@@ -42,8 +44,11 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
     // Initialize Cloud Firestore
     db = getFirestore(app);
     
+    // Initialize Auth
+    auth = getAuth(app);
+    
     isConfigured = true;
-    console.log("Firebase Cloud Firestore initialized successfully");
+    console.log("Firebase initialized successfully (Firestore & Auth)");
   } catch (e) {
     console.error("Firebase initialization failed:", e);
   }
@@ -52,6 +57,30 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
 }
 
 export const isFirebaseEnabled = () => isConfigured;
+export { auth };
+
+// Auth Helpers
+const googleProvider = new GoogleAuthProvider();
+
+export const loginWithGoogle = async (): Promise<User> => {
+  if (!auth) throw new Error("Firebase Auth not initialized");
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
+  } catch (error) {
+    console.error("Login failed", error);
+    throw error;
+  }
+};
+
+export const logout = async () => {
+  if (!auth) return;
+  try {
+    await firebaseSignOut(auth);
+  } catch (error) {
+    console.error("Logout failed", error);
+  }
+};
 
 // Constants for Firestore Collection and Document
 const COLLECTION_NAME = 'shift_scheduler';
