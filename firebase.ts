@@ -1,45 +1,54 @@
-import firebase from 'firebase/compat/app';
-import 'firebase/compat/firestore';
-import 'firebase/compat/analytics';
+import { initializeApp, FirebaseApp } from 'firebase/app';
+import { getFirestore, doc, onSnapshot, setDoc, Firestore } from 'firebase/firestore';
+import { getAnalytics } from 'firebase/analytics';
 import { AppState } from './types';
 
 // ------------------------------------------------------------------
 // FIREBASE CONFIGURATION / FIREBASE 設定
 // ------------------------------------------------------------------
-// Using Cloud Firestore (via Compat API)
+// Using Cloud Firestore (Modular SDK)
+// Keys are loaded from .env file for security
 // ------------------------------------------------------------------
 
+// Cast import.meta to any to avoid type errors when vite types are missing
+const env = (import.meta as any).env;
+
 const firebaseConfig = {
-  apiKey: "AIzaSyDT7WprmgPSa_rONLEUkr9LWSZeHClpTFM",
-  authDomain: "leavetable-fd826.firebaseapp.com",
-  projectId: "leavetable-fd826",
-  storageBucket: "leavetable-fd826.firebasestorage.app",
-  messagingSenderId: "844876295872",
-  appId: "1:844876295872:web:4b3cd98e646846f0868725"
+  apiKey: env.VITE_FIREBASE_API_KEY,
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: env.VITE_FIREBASE_APP_ID
 };
 
-let app: firebase.app.App;
-let db: firebase.firestore.Firestore | null = null;
+let app: FirebaseApp;
+let db: Firestore | null = null;
 let isConfigured = false;
 
-try {
-  // Initialize Firebase (Compat)
-  app = firebase.initializeApp(firebaseConfig);
-  
-  // Initialize Analytics (Optional)
+// Basic validation to ensure keys exist
+if (firebaseConfig.apiKey && firebaseConfig.projectId) {
   try {
-    firebase.analytics();
+    // Initialize Firebase
+    app = initializeApp(firebaseConfig);
+    
+    // Initialize Analytics (Optional)
+    try {
+      getAnalytics(app);
+    } catch (e) {
+      console.debug("Analytics not initialized");
+    }
+    
+    // Initialize Cloud Firestore
+    db = getFirestore(app);
+    
+    isConfigured = true;
+    console.log("Firebase Cloud Firestore initialized successfully");
   } catch (e) {
-    console.debug("Analytics not initialized");
+    console.error("Firebase initialization failed:", e);
   }
-  
-  // Initialize Cloud Firestore
-  db = firebase.firestore();
-  
-  isConfigured = true;
-  console.log("Firebase Cloud Firestore initialized successfully");
-} catch (e) {
-  console.error("Firebase initialization failed:", e);
+} else {
+  console.warn("Firebase configuration missing in environment variables.");
 }
 
 export const isFirebaseEnabled = () => isConfigured;
@@ -57,14 +66,14 @@ export const subscribeToData = (
     return () => {};
   }
 
-  const docRef = db.collection(COLLECTION_NAME).doc(DOC_NAME);
+  const docRef = doc(db, COLLECTION_NAME, DOC_NAME);
   
   // Real-time listener using onSnapshot for Firestore
-  const unsubscribe = docRef.onSnapshot(
-    (doc) => {
-      if (doc.exists) {
-        // Firestore data() returns the object
-        onData(doc.data() as AppState);
+  const unsubscribe = onSnapshot(
+    docRef,
+    (docSnap) => {
+      if (docSnap.exists()) {
+        onData(docSnap.data() as AppState);
       } else {
         // Document doesn't exist yet
         onData(null); 
@@ -86,8 +95,9 @@ export const saveDataToFirebase = async (data: AppState) => {
   }
   
   try {
-    // Use .set() to overwrite the document with the new state
-    await db.collection(COLLECTION_NAME).doc(DOC_NAME).set(data);
+    const docRef = doc(db, COLLECTION_NAME, DOC_NAME);
+    // Use setDoc to overwrite the document with the new state
+    await setDoc(docRef, data);
   } catch (e) {
     console.error("Error saving to Firestore:", e);
     throw e;
