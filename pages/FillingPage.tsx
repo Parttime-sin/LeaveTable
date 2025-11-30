@@ -136,32 +136,32 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
   }
 
   return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+    <div className="max-w-7xl mx-auto py-2 sm:py-8 px-2 sm:px-6 lg:px-8">
       {/* Header Actions */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-lg sm:text-2xl font-bold text-gray-900">
             {settings.year}年 {settings.month + 1}月 假表填寫
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            請選擇您的姓名，點擊上班日期進行填寫。記得點擊儲存。
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+            請選擇您的姓名，點擊上班日期進行填寫。
           </p>
         </div>
         
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
            <button 
             onClick={handleCopyLink}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            className="flex-1 md:flex-none justify-center inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-xs sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             <Share2 className="w-4 h-4 mr-2" />
-            分享連結
+            分享
           </button>
           <button 
             onClick={handleSave}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-blue-600"
+            className="flex-1 md:flex-none justify-center inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-primary hover:bg-blue-600"
           >
             <Save className="w-4 h-4 mr-2" />
-            儲存變更
+            儲存
           </button>
         </div>
       </div>
@@ -173,30 +173,33 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
       )}
 
       {/* User Selector */}
-      <div className="bg-white p-4 rounded-lg shadow mb-6 flex items-center space-x-4 sticky top-16 z-40 border-b border-gray-100">
-        <label className="text-sm font-bold text-gray-700 whitespace-nowrap">我是：</label>
+      <div className="bg-white p-2 sm:p-4 rounded-lg shadow mb-4 flex items-center space-x-2 sm:space-x-4 sticky top-16 z-40 border-b border-gray-100">
+        <label className="text-xs sm:text-sm font-bold text-gray-700 whitespace-nowrap">我是：</label>
         <select 
           value={currentUser} 
           onChange={(e) => setCurrentUser(e.target.value)}
-          className="block w-full max-w-xs rounded-md border-gray-300 border p-2 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
+          className="block w-full max-w-xs rounded-md border-gray-300 border p-1.5 sm:p-2 text-sm shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
         >
           <option value="">-- 請選擇姓名 --</option>
           {settings.members.map(m => (
             <option key={m} value={m}>{m}</option>
           ))}
         </select>
-        {!currentUser && <span className="text-sm text-red-500 animate-pulse font-medium">請先選擇姓名</span>}
+        {!currentUser && <span className="text-xs sm:text-sm text-red-500 animate-pulse font-medium">請先選擇姓名</span>}
       </div>
 
-      {/* Calendar Grid Container - Added horizontal scroll for mobile */}
+      {/* Calendar Grid Container - Optimized for Mobile Landscape */}
       <div className="bg-white shadow rounded-lg overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
-          <div className="min-w-[800px]"> {/* Force minimum width to prevent squishing on mobile */}
+          {/* 
+              Compact width 500px allows fitting on smaller landscape screens
+          */}
+          <div className="min-w-[500px] md:min-w-[800px]"> 
             
             {/* Grid Header */}
             <div className="grid grid-cols-7 gap-px bg-gray-200 border-b border-gray-200">
               {WEEKDAYS.map(day => (
-                <div key={day} className="bg-gray-50 py-3 text-center text-sm font-bold text-gray-700">
+                <div key={day} className="bg-gray-50 py-1 sm:py-3 text-center text-[10px] sm:text-sm font-bold text-gray-700">
                   {day}
                 </div>
               ))}
@@ -218,17 +221,18 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                   <div 
                     key={dateStr}
                     style={colSpanStyle}
-                    className={`min-h-[140px] bg-white relative flex flex-col ${!workDay ? 'bg-slate-50' : ''}`}
+                    // Extremely reduced min-height [30px] for compact mobile view
+                    className={`min-h-[30px] sm:min-h-[60px] md:min-h-[120px] bg-white relative flex flex-col ${!workDay ? 'bg-slate-50' : ''}`}
                   >
                     {/* Day Header */}
-                    <div className="flex justify-between items-start p-2">
-                      <span className={`text-sm font-medium ${!workDay ? 'text-gray-400' : 'text-gray-900'}`}>
+                    <div className="flex justify-between items-start p-0.5 sm:p-2">
+                      <span className={`text-[9px] sm:text-sm font-medium ${!workDay ? 'text-gray-400' : 'text-gray-900'}`}>
                         {format(day, 'd')}
                       </span>
                       {workDay && quota > 0 && (
-                        <div className={`flex items-center text-xs px-1.5 py-0.5 rounded-full ${isOverQuota ? 'bg-red-100 text-red-700 font-bold' : 'bg-green-100 text-green-700'}`}>
-                          {leavesCount} / {quota}
-                          {isOverQuota && <AlertCircle className="w-3 h-3 ml-1" />}
+                        <div className={`flex items-center text-[8px] sm:text-xs px-0.5 py-0 sm:px-1.5 sm:py-0.5 rounded-full ${isOverQuota ? 'bg-red-100 text-red-700 font-bold' : 'bg-green-100 text-green-700'}`}>
+                          {leavesCount}/{quota}
+                          {isOverQuota && <AlertCircle className="w-2 h-2 sm:w-3 sm:h-3 ml-0.5" />}
                         </div>
                       )}
                     </div>
@@ -236,10 +240,10 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                     {/* Content */}
                     {!workDay ? (
                       <div className="flex-1 flex items-center justify-center">
-                          <span className="text-5xl font-black text-slate-200 select-none">O</span>
+                          <span className="text-lg sm:text-2xl md:text-5xl font-black text-slate-200 select-none">O</span>
                       </div>
                     ) : (
-                      <div className="flex-1 px-2 pb-2 flex flex-col gap-1">
+                      <div className="flex-1 px-0.5 pb-0.5 sm:px-2 sm:pb-2 flex flex-col gap-0.5 sm:gap-1">
                         {/* Render existing leaves */}
                         {dayLeaves.map(leave => {
                           const isCurrentUser = currentUser === leave.memberName;
@@ -247,20 +251,20 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                             <div 
                               key={leave.id} 
                               className={`
-                                flex justify-between items-center px-2 py-1.5 rounded border mb-0.5 group
+                                flex justify-between items-center px-0.5 py-0 sm:px-2 sm:py-1.5 rounded border group
                                 ${isCurrentUser 
                                   ? 'bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-300 z-10' 
                                   : 'bg-blue-50 text-blue-700 border-blue-100'}
                               `}
                             >
-                              <div className="flex-1 flex justify-between items-center overflow-hidden mr-1">
-                                <span className="font-bold truncate text-xs">{leave.memberName}</span>
-                                <span className="font-bold whitespace-nowrap text-xs">{leave.type}</span>
+                              <div className="flex-1 flex justify-between items-center overflow-hidden mr-0.5">
+                                <span className="font-bold truncate text-[8px] sm:text-xs leading-tight">{leave.memberName}</span>
+                                <span className="font-bold whitespace-nowrap text-[8px] sm:text-xs leading-tight ml-0.5">{leave.type}</span>
                               </div>
                               {/* Only allow deleting if it's the current user */}
                               {(currentUser === leave.memberName) && (
-                                <button onClick={(e) => { e.stopPropagation(); handleRemoveLeave(leave.id); }} className="text-gray-400 hover:text-red-600 ml-1">
-                                  <X className="w-3.5 h-3.5" />
+                                <button onClick={(e) => { e.stopPropagation(); handleRemoveLeave(leave.id); }} className="text-gray-400 hover:text-red-600 ml-0.5">
+                                  <X className="w-2 h-2 sm:w-3.5 sm:h-3.5" />
                                 </button>
                               )}
                             </div>
@@ -271,9 +275,9 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                         {currentUser && quota > 0 && (
                           <button 
                             onClick={() => { setSelectedDate(dateStr); setSelectedType(''); }}
-                            className="mt-auto w-full flex justify-center items-center py-1 border-2 border-dashed border-gray-200 rounded text-gray-400 hover:border-primary hover:text-primary transition-colors text-xs"
+                            className="mt-auto w-full flex justify-center items-center py-0 sm:py-1 border-2 border-dashed border-gray-200 rounded text-gray-400 hover:border-primary hover:text-primary transition-colors text-[8px] sm:text-xs h-3.5 sm:h-auto"
                           >
-                            <Plus className="w-3 h-3" />
+                            <Plus className="w-2 h-2 sm:w-3 sm:h-3" />
                           </button>
                         )}
                       </div>

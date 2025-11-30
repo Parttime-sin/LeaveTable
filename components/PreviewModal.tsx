@@ -103,14 +103,14 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, settings, 
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-auto bg-gray-50 p-4">
+          <div className="flex-1 overflow-auto bg-gray-50 p-2 sm:p-4">
             
-            {/* Unified Grid View with Horizontal Scroll for Mobile */}
-            <div className="min-w-[800px] bg-white rounded-lg shadow ring-1 ring-gray-200">
+            {/* Unified Grid View with optimized mobile landscape sizing */}
+            <div className="min-w-[500px] md:min-w-[800px] bg-white rounded-lg shadow ring-1 ring-gray-200">
               <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
                 {/* Header */}
                 {WEEKDAYS.map((day) => (
-                  <div key={day} className="py-3 text-center text-sm font-semibold text-gray-700 border-r last:border-r-0 border-gray-200">
+                  <div key={day} className="py-1 sm:py-3 text-center text-[10px] sm:text-sm font-semibold text-gray-700 border-r last:border-r-0 border-gray-200">
                     {day}
                   </div>
                 ))}
@@ -126,36 +126,36 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, settings, 
                     <div 
                       key={dateStr} 
                       style={colSpanStyle}
-                      className={`min-h-[140px] bg-white p-2 relative flex flex-col ${!isWorkDay ? 'bg-slate-50' : ''}`}
+                      className={`min-h-[30px] sm:min-h-[60px] md:min-h-[120px] bg-white p-0.5 sm:p-2 relative flex flex-col ${!isWorkDay ? 'bg-slate-50' : ''}`}
                     >
-                      <div className="flex justify-between items-start mb-1">
-                        <span className={`text-sm font-medium ${!isWorkDay ? 'text-gray-400' : 'text-gray-900'}`}>
+                      <div className="flex justify-between items-start mb-0.5">
+                        <span className={`text-[9px] sm:text-sm font-medium ${!isWorkDay ? 'text-gray-400' : 'text-gray-900'}`}>
                           {format(day, 'd')}
                         </span>
                         {!isWorkDay && (
-                          <span className="text-4xl font-black text-slate-100 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 select-none pointer-events-none">
+                          <span className="text-lg sm:text-2xl md:text-4xl font-black text-slate-100 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 select-none pointer-events-none">
                             O
                           </span>
                         )}
                       </div>
 
                       {isWorkDay && (
-                        <div className="space-y-1 overflow-y-auto flex-1 max-h-[120px]">
+                        <div className="space-y-0.5 sm:space-y-1 overflow-y-auto flex-1 max-h-[120px]">
                           {dayLeaves.map((leave) => {
                             const isCurrentUser = leave.memberName === currentUser;
                             return (
                               <div 
                                 key={leave.id} 
                                 className={`
-                                  flex items-center justify-between px-2 py-1 rounded text-xs border 
+                                  flex items-center justify-between px-0.5 py-0 sm:px-2 sm:py-1 rounded border 
                                   ${isCurrentUser 
                                     ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold ring-1 ring-amber-300 shadow-sm z-10' 
                                     : 'bg-blue-50 text-blue-700 border-blue-100'}
                                 `}
                               >
-                                <span className="truncate max-w-[80px]">{leave.memberName}</span>
+                                <span className="truncate max-w-[80px] text-[8px] sm:text-xs leading-tight">{leave.memberName}</span>
                                 <span className={`
-                                  px-1.5 rounded shadow-sm text-[10px] font-medium min-w-[30px] text-center ml-1
+                                  px-0.5 rounded shadow-sm text-[8px] sm:text-[10px] font-medium min-w-[14px] sm:min-w-[24px] text-center ml-0.5 leading-tight
                                   ${isCurrentUser ? 'bg-amber-200' : 'bg-white'}
                                 `}>
                                   {leave.type}
