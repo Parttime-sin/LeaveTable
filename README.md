@@ -1,20 +1,85 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# 團隊假表管理系統 (LeaveTable)
 
-# Run and deploy your AI Studio app
+專為特殊輪班制（如「做一休一」）團隊設計的線上假表協作系統。支援每日休假名額控管、多種假別設定、即時雲端同步以及響應式網頁設計。
 
-This contains everything you need to run your app locally.
+## ✨ 功能特色
 
-View your app in AI Studio: https://ai.studio/apps/drive/1NAOdsnxWDjpw9psBc9dBHM-4oa71peDm
+*   **輪班模式支援**：內建單/雙日輪班邏輯計算，自動標示上班日與休假日。
+*   **彈性配額管理**：
+    *   可設定每日可休人數上限。
+    *   支援小數點配額（例如 0.5），用於控管「外宿」等特殊半日假別。
+    *   提供整月批量設定與單日細部調整功能。
+*   **假別系統**：
+    *   全日假：特休 (1-3)、補休 (1-4)、年休 (1-4)。
+    *   半日假：外宿。
+*   **即時協作 (Firebase)**：支援多人同時在線編輯，資料即時同步更新。
+*   **離線/本機模式**：若未設定 Firebase，系統會自動切換至 LocalStorage 模式，將資料儲存於瀏覽器端。
+*   **RWD 響應式設計**：針對手機操作優化，支援表格橫向捲動與直覺的點擊填寫。
 
-## Run Locally
+## 🛠️ 技術棧
 
-**Prerequisites:**  Node.js
+*   **核心框架**: [React 18/19](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
+*   **建置工具**: [Vite](https://vitejs.dev/)
+*   **樣式庫**: [Tailwind CSS](https://tailwindcss.com/) (CDN 載入)
+*   **圖示庫**: [Lucide React](https://lucide.dev/)
+*   **後端/資料庫**: [Firebase Firestore](https://firebase.google.com/)
+
+## 🚀 快速開始
+
+### 1. 安裝相依套件
+
+```bash
+npm install
+```
+
+### 2. 啟動開發伺服器
+
+```bash
+npm run dev
+```
+
+瀏覽器將自動開啟預覽頁面 (通常是 http://localhost:5173)。
+
+### 3. 建置生產版本
+
+```bash
+npm run build
+```
+
+## ⚙️ 設定說明
+
+### 系統初始化流程
+
+首次進入系統時，請依序執行以下步驟：
+
+1.  點擊導覽列的 **「配額設定」**。
+2.  **新增團隊人員**：在左側面板輸入姓名並新增。
+3.  **設定輪班基準**：設定當月首日是否為上班日（選擇「1號」或「2號」上班）。
+4.  **設定休假配額**：
+    *   **批量設定**：輸入數字（如 2）並套用，設定所有上班日的可休人數。
+    *   **單日微調**：點擊右側日曆的特定日期，可單獨修改該日配額（如設為 0.5 或清除）。
+
+完成上述設定後，即可切換至 **「假表填寫」** 頁面開始作業。
+
+### Firebase 雲端同步設定
+
+本專案預設包含一組 Firebase 設定 (`firebase.ts`)。若您要部署自己的版本或確保資料隱私，請務必建立自己的 Firebase 專案：
+
+1.  前往 [Firebase Console](https://console.firebase.google.com/) 建立新專案。
+2.  新增一個 Web App。
+3.  建立 **Cloud Firestore** 資料庫（建議以測試模式開始，或自行設定安全性規則）。
+4.  複製 Firebase SDK 的設定物件 (`firebaseConfig`)。
+5.  開啟專案中的 `firebase.ts` 檔案，替換 `firebaseConfig` 內容：
 
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+**注意**：若 `firebase.ts` 中的設定無效或連線失敗，系統會自動降級為本機模式 (Local Mode)，資料僅會儲存在操作者的瀏覽器中。
+
+## 📱 操作邏輯
+
+*   **一般假別**：當日配額為整數（如 1, 2）時，可選擇所有全日假別。
+*   **外宿 (半日)**：若當日配額含有小數（如 0.5, 1.5），或配額允許時，系統會開放選擇「外宿」。
+*   **衝突檢測**：填寫頁面會即時顯示當日已填寫人數與配額上限，若超額將以紅色警示顯示。
+
+## 📄 授權
+
+此專案僅供內部團隊協作使用。
