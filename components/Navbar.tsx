@@ -1,5 +1,5 @@
 import React from 'react';
-import { Settings, CalendarDays, ClipboardEdit, Cloud, CloudOff, Database } from 'lucide-react';
+import { Settings, CalendarDays, ClipboardEdit, Cloud, Database } from 'lucide-react';
 import { PageView } from '../types';
 
 interface NavbarProps {
