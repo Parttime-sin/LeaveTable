@@ -2,6 +2,7 @@
   "name": "shift-scheduler",
   "private": true,
   "version": "1.0.0",
+  "homepage": "https://<您的GitHub帳號>.github.io/<您的Repo名稱>",
   "type": "module",
   "scripts": {
     "dev": "vite",
