@@ -10,6 +10,8 @@ export enum LeaveType {
   Rest2 = '休2',
   Rest3 = '休3',
   Rest4 = '休4',
+  Personal1 = '身1',
+  Personal2 = '身2',
   Overnight = '外宿'
 }
 

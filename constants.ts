@@ -12,6 +12,8 @@ export const FULL_DAY_LEAVES = [
   LeaveType.Rest2,
   LeaveType.Rest3,
   LeaveType.Rest4,
+  LeaveType.Personal1,
+  LeaveType.Personal2,
 ];
 
 export const HALF_DAY_LEAVES = [
