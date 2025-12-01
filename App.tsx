@@ -3,10 +3,22 @@ import Navbar from './components/Navbar';
 import SettingsPage from './pages/SettingsPage';
 import FillingPage from './pages/FillingPage';
 import LoginPage from './components/LoginPage';
+import DebugConsole from './components/DebugConsole';
 import { AppSettings, LeaveEntry, AppState, PageView } from './types';
 import { STORAGE_KEY } from './constants';
-import { isFirebaseEnabled, subscribeToData, saveDataToFirebase, auth, loginWithGoogle, logout, checkRedirectResult } from './firebase';
+import { 
+  isFirebaseEnabled, 
+  subscribeToData, 
+  saveDataToFirebase, 
+  auth, 
+  loginWithGoogle, 
+  logout, 
+  checkRedirectResult,
+  isRedirectPending,
+  clearRedirectFlag 
+} from './firebase';
 import { User } from 'firebase/auth';
+import { addLog } from './logger';
 
 const DEFAULT_SETTINGS: AppSettings = {
   year: new Date().getFullYear(),
@@ -32,110 +44,135 @@ const App: React.FC = () => {
   const [dataLoading, setDataLoading] = useState(true);
   const [isFirebaseReady, setIsFirebaseReady] = useState(false);
   
+  // Debug Console State
+  const [showDebug, setShowDebug] = useState(false);
+  
   // Ref to prevent saving loop when receiving updates from Firebase
   const isRemoteUpdate = useRef(false);
 
   // 1. Initialize Firebase availability check
   useEffect(() => {
     setIsFirebaseReady(isFirebaseEnabled());
-  }, []);
-
-  // 2. Auth Listener
-  useEffect(() => {
-    if (isFirebaseEnabled() && auth) {
-      const unsubscribe = auth.onAuthStateChanged((u) => {
-        setUser(u);
-        setAuthLoading(false);
-      });
-      return () => unsubscribe();
-    } else {
-      // Local mode or firebase not configured
-      setAuthLoading(false);
-    }
+    addLog("App Mounted. Firebase Enabled: " + isFirebaseEnabled());
   }, []);
 
   // Common Error Handler for Auth
   const handleAuthError = (error: any) => {
       console.error("Auth Error:", error);
+      
       let msg = "登入失敗，請重試。";
-      
       if (error.code === 'auth/popup-closed-by-user') {
-        msg = "登入視窗已被關閉，請再試一次。";
-      } else if (error.code === 'auth/cancelled-popup-request') {
-         msg = "已有一個登入視窗開啟中，請關閉後重試。";
+        msg = "登入視窗已被關閉。";
       } else if (error.code === 'auth/unauthorized-domain') {
-        msg = `網域未授權 (${window.location.hostname})。\n請至 Firebase Console > Authentication > Settings > Authorized Domains 新增此網域。`;
-      } else if (error.code === 'auth/operation-not-allowed') {
-        msg = "Google 登入功能尚未啟用。\n請至 Firebase Console > Authentication > Sign-in method 啟用 Google 提供者。";
-      } else if (error.code === 'auth/api-key-not-valid') {
-        msg = "API Key 設定錯誤，請檢查 .env 檔案。";
+        msg = `網域未授權 (${window.location.hostname})。`;
       } else if (error.message) {
-        msg = `登入發生錯誤 (${error.code || 'unknown'}): ${error.message}`;
+        msg = error.message;
       }
-      
       alert(msg);
   };
 
-  // 3. Check for Redirect Result (for Mobile Login flows)
+  // 2. Auth Initialization & Redirect Handling
   useEffect(() => {
-    if (isFirebaseEnabled()) {
-      checkRedirectResult().catch(handleAuthError);
+    let isMounted = true;
+    let safetyTimer: NodeJS.Timeout;
+
+    if (!isFirebaseEnabled() || !auth) {
+      setAuthLoading(false);
+      return;
     }
+
+    // Safety: Force stop loading after 8s if Firebase hangs
+    safetyTimer = setTimeout(() => {
+      if (isMounted && authLoading) {
+        addLog("Safety Timer Triggered (8s). Clearing loading state.", 'error');
+        setAuthLoading(false);
+        clearRedirectFlag();
+      }
+    }, 8000);
+
+    const initAuth = async () => {
+      // Check if we are coming back from a fallback redirect
+      if (isRedirectPending()) {
+        try {
+          // guarantees flag cleanup internally
+          const resultUser = await checkRedirectResult();
+          
+          if (!resultUser) {
+            // Redirect failed or cancelled
+            addLog("initAuth: Redirect checked but no user found. Stopping loading.", 'warn');
+            if (isMounted) setAuthLoading(false);
+          }
+          // If resultUser exists, onAuthStateChanged handles it
+        } catch (_error) {
+          addLog("initAuth: Redirect check error.", 'error');
+          if (isMounted) setAuthLoading(false);
+        }
+      }
+    };
+
+    // Listen for Auth State Changes
+    const unsubscribe = auth.onAuthStateChanged((currentUser) => {
+      if (!isMounted) return;
+
+      if (currentUser) {
+        addLog(`Auth User: ${currentUser.email}`, 'success');
+        setUser(currentUser);
+        setAuthLoading(false);
+        clearTimeout(safetyTimer);
+        clearRedirectFlag(); 
+      } else {
+        addLog("Auth: No user session found.");
+        setUser(null);
+        
+        // Only stop loading if we are NOT waiting for a redirect check
+        if (!isRedirectPending()) {
+           setAuthLoading(false);
+        }
+      }
+    });
+
+    // Run the Redirect Check logic (for fallback recovery)
+    initAuth();
+
+    return () => {
+      isMounted = false;
+      clearTimeout(safetyTimer);
+      unsubscribe();
+    };
   }, []);
 
-  // 4. Data Subscription (Depends on Auth)
+  // 3. Data Subscription
   useEffect(() => {
-    const firebaseEnabled = isFirebaseEnabled();
-    
-    // If Firebase is enabled but user is not logged in, do not subscribe yet (wait for login)
-    if (firebaseEnabled && !user) {
-      return; 
-    }
-
-    if (firebaseEnabled) {
-      // --- Firebase Mode ---
-      console.log("Connecting to Firebase...");
+    if (isFirebaseEnabled() && user) {
       const unsubscribe = subscribeToData(
         (remoteData) => {
           if (remoteData) {
-            console.log("Received data from Firebase");
             isRemoteUpdate.current = true;
             setData(remoteData);
-            // Also sync to local storage as backup/cache
             localStorage.setItem(STORAGE_KEY, JSON.stringify(remoteData));
             setTimeout(() => { isRemoteUpdate.current = false; }, 100);
           } else {
-            // Document does not exist in Firebase yet.
-            // Try to load from LocalStorage to initialize Firebase
-            console.log("No data in Firebase, checking LocalStorage for initial upload...");
+            // Migration logic for first time upload
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
               try {
                 const parsed = JSON.parse(stored);
-                // Upload local data to Firebase to init the DB
                 const initialData = {
                   settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
                   leaves: parsed.leaves || []
                 };
                 setData(initialData);
                 saveDataToFirebase(initialData);
-              } catch (e) {
-                console.error("Local storage parse error during migration", e);
-              }
+              } catch (e) { console.error(e); }
             }
           }
           setDataLoading(false);
         },
-        (error) => {
-          console.error("Firebase subscription error, falling back to local", error);
-          setDataLoading(false);
-        }
+        (_error) => setDataLoading(false)
       );
-
       return () => unsubscribe();
     } else {
-      // --- Local Storage Mode (Fallback) ---
-      console.log("Firebase not configured. Using LocalStorage.");
+      // Local Mode
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         try {
@@ -144,98 +181,72 @@ const App: React.FC = () => {
             settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
             leaves: parsed.leaves || []
           });
-        } catch (e) {
-          console.error("Failed to parse local storage", e);
-        }
+        } catch (e) { console.error(e); }
       }
       setDataLoading(false);
     }
-  }, [user]); // Re-run when user logs in
+  }, [user]);
 
   const handleLogin = async () => {
     setLoginLoading(true);
-    
-    // Detect Mobile
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
     try {
-      await loginWithGoogle(isMobile);
-      // If mobile, it will redirect, and the code below won't strictly finish execution before unload.
-      // If desktop, it waits for popup.
+      await loginWithGoogle(); 
     } catch (error: any) {
-      handleAuthError(error);
       setLoginLoading(false);
-    } finally {
-      // Only reset loading if we are NOT redirecting (Desktop)
-      // If we are redirecting, the page will reload anyway, or if it failed immediately it was caught above
-      if (!isMobile) {
-         setLoginLoading(false);
-      }
+      handleAuthError(error);
     }
   };
 
   const handleLogout = async () => {
     if (window.confirm("確定要登出嗎？")) {
       await logout();
-      setDataLoading(true); // Reset loading for next login
-    }
-  };
-
-  const saveData = async (newData: AppState) => {
-    setData(newData);
-    
-    // Always save to LocalStorage as backup
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(newData));
-
-    // If Firebase is active and this is NOT a remote update, push to cloud
-    if (isFirebaseReady && !isRemoteUpdate.current) {
-      if (!user) {
-        console.warn("User not logged in, cannot save to Firebase");
-        return;
-      }
-      try {
-        await saveDataToFirebase(newData);
-        console.log("Data synced to Firebase");
-      } catch (e) {
-        console.error("Failed to sync to Firebase", e);
-        alert("無法同步至雲端 (可能無寫入權限)。");
-      }
+      setDataLoading(true); 
     }
   };
 
   const handleSaveSettings = (newSettings: AppSettings) => {
     const newState = { ...data, settings: newSettings };
-    saveData(newState);
+    setData(newState);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+    if (isFirebaseReady && !isRemoteUpdate.current && user) {
+      saveDataToFirebase(newState).catch(_e => alert("同步失敗"));
+    }
   };
 
   const handleSaveLeaves = (newLeaves: LeaveEntry[]) => {
     const newState = { ...data, leaves: newLeaves };
-    saveData(newState);
+    setData(newState);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newState));
+    if (isFirebaseReady && !isRemoteUpdate.current && user) {
+      saveDataToFirebase(newState).catch(_e => alert("同步失敗"));
+    }
   };
 
-  // 1. Show global loading if Auth is checking
   if (authLoading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-50 flex-col gap-4">
-         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
-         <div className="text-slate-500 text-sm">驗證身分中...</div>
+      <div className="flex items-center justify-center h-screen bg-slate-50 flex-col gap-4 fixed inset-0 z-[9999]">
+         <div className="animate-spin rounded-full h-12 w-12 border-4 border-slate-200 border-t-primary"></div>
+         <div className="text-slate-600 font-medium text-sm animate-pulse">系統載入中...</div>
+         <div 
+            className="fixed bottom-0 left-0 w-full h-10 opacity-0 z-50" 
+            onClick={() => setShowDebug(prev => !prev)}
+         ></div>
+         <DebugConsole isVisible={showDebug} onClose={() => setShowDebug(false)} />
       </div>
     );
   }
 
-  // 2. If Firebase is enabled but NO user -> Login Page
   if (isFirebaseReady && !user) {
-    return <LoginPage onLogin={handleLogin} loading={loginLoading} />;
-  }
-
-  // 3. Main App Loading (Data Fetching)
-  if (dataLoading) {
-      return (
-          <div className="flex items-center justify-center h-screen bg-slate-50 flex-col gap-4">
-             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-             <div className="text-slate-500">載入資料中...</div>
-          </div>
-      )
+    return (
+      <>
+        <LoginPage 
+          onLogin={handleLogin} 
+          loading={loginLoading} 
+          onShowDebug={() => setShowDebug(true)}
+        />
+        <DebugConsole isVisible={showDebug} onClose={() => setShowDebug(false)} />
+      </>
+    );
   }
 
   return (
@@ -251,44 +262,21 @@ const App: React.FC = () => {
       <main className="max-w-7xl mx-auto px-4 py-8">
         {!isFirebaseReady && (
           <div className="mb-6 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r shadow-sm">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-yellow-700">
-                  目前使用 <strong>本機模式</strong>。若需團隊共同編輯，請編輯程式碼中的 <code>firebase.ts</code> 檔案並填入您的 API 金鑰。
-                </p>
-              </div>
-            </div>
+            <p className="text-sm text-yellow-700">目前使用 <strong>本機模式</strong>。</p>
           </div>
         )}
 
-        {page === 'settings' && (
-          <SettingsPage 
-            settings={data.settings} 
-            onSaveSettings={handleSaveSettings} 
-          />
-        )}
-        {page === 'filling' && (
-          <FillingPage 
-            settings={data.settings} 
-            savedLeaves={data.leaves}
-            onSaveLeaves={handleSaveLeaves}
-          />
+        {dataLoading ? (
+           <div className="flex justify-center py-10"><div className="animate-spin h-8 w-8 border-b-2 border-primary rounded-full"></div></div>
+        ) : (
+          <>
+            {page === 'settings' && <SettingsPage settings={data.settings} onSaveSettings={handleSaveSettings} />}
+            {page === 'filling' && <FillingPage settings={data.settings} savedLeaves={data.leaves} onSaveLeaves={handleSaveLeaves} />}
+          </>
         )}
       </main>
 
-      <footer className="bg-white border-t border-slate-200 mt-12 py-6">
-        <div className="max-w-7xl mx-auto px-4 text-center text-slate-500 text-sm">
-          <p>© {new Date().getFullYear()} 團隊假表管理系統</p>
-          <p className="mt-1 text-xs text-slate-400">
-            {isFirebaseReady ? `Cloud Mode (Google Auth: ${user?.displayName || 'Unknown'})` : 'Local Mode (Browser Storage)'}
-          </p>
-        </div>
-      </footer>
+      <DebugConsole isVisible={showDebug} onClose={() => setShowDebug(false)} />
     </div>
   );
 };
