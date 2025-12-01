@@ -36,7 +36,20 @@
 npm install
 ```
 
-### 2. 啟動開發伺服器
+### 2. 設定環境變數 (.env)
+
+請在專案根目錄建立一個 `.env` 檔案，並填入您的 Firebase 專案設定資訊 (請替換為您的實際數值)：
+
+```env
+VITE_FIREBASE_API_KEY=your_api_key
+VITE_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your_project_id
+VITE_FIREBASE_STORAGE_BUCKET=your_project_id.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+VITE_FIREBASE_APP_ID=your_app_id
+```
+
+### 3. 啟動開發伺服器
 
 ```bash
 npm run dev
@@ -44,7 +57,7 @@ npm run dev
 
 瀏覽器將自動開啟預覽頁面 (通常是 http://localhost:5173)。
 
-### 3. 建置生產版本
+### 4. 建置生產版本
 
 ```bash
 npm run build
