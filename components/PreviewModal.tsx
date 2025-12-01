@@ -1,6 +1,6 @@
-import React from 'react';
-import { X, Calendar as CalendarIcon } from 'lucide-react';
-import { AppSettings, LeaveEntry } from '../types';
+import React, { useState } from 'react';
+import { X, Calendar as CalendarIcon, ZoomIn, ZoomOut } from 'lucide-react';
+import { AppSettings, LeaveEntry, GroupType } from '../types';
 import { WEEKDAYS } from '../constants';
 
 // Local date helpers to replace date-fns and avoid version/import issues
@@ -43,14 +43,32 @@ interface PreviewModalProps {
   settings: AppSettings;
   leaves: LeaveEntry[];
   currentUser?: string;
+  currentGroup: GroupType;
 }
 
-const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, settings, leaves, currentUser }) => {
+const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, settings, leaves, currentUser, currentGroup }) => {
+  const [isZoomed, setIsZoomed] = useState(false);
+
   if (!isOpen) return null;
 
   const monthStart = startOfMonth(new Date(settings.year, settings.month));
   const monthEnd = endOfMonth(monthStart);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+
+  const groupMembers = currentGroup === 'A' ? settings.membersA : settings.membersB;
+  const groupFirstWorkDay = currentGroup === 'A' ? settings.firstWorkDayA : settings.firstWorkDayB;
+  const groupColorClass = currentGroup === 'A' ? 'text-indigo-600' : 'text-teal-600';
+  const groupBgClass = currentGroup === 'A' ? 'bg-indigo-100' : 'bg-teal-100';
+
+  // Dynamic Styles based on Zoom
+  const containerMinWidth = isZoomed ? 'min-w-[1000px]' : 'min-w-[500px] md:min-w-[800px]';
+  const headerTextSize = isZoomed ? 'text-sm py-3' : 'text-[10px] sm:text-sm py-1 sm:py-3';
+  const cellMinHeight = isZoomed ? 'min-h-[100px] p-2' : 'min-h-[30px] sm:min-h-[60px] md:min-h-[120px] p-0.5 sm:p-2';
+  const dateTextSize = isZoomed ? 'text-base font-bold' : 'text-[9px] sm:text-sm font-medium';
+  const leaveWrapperPadding = isZoomed ? 'px-2 py-1 mb-1' : 'px-0.5 py-0 sm:px-2 sm:py-1';
+  const leaveNameSize = isZoomed ? 'text-sm max-w-[120px]' : 'text-[8px] sm:text-xs max-w-[80px]';
+  const leaveTypeSize = isZoomed ? 'text-xs min-w-[32px] px-1' : 'text-[8px] sm:text-[10px] min-w-[14px] sm:min-w-[24px] px-0.5';
+  const leavesContainerMaxHeight = isZoomed ? 'max-h-[200px]' : 'max-h-[120px]';
 
   // Pre-calculate data for each day
   const getDayData = (date: Date) => {
@@ -58,15 +76,13 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, settings, 
     
     // Check work day logic
     let isWorkDay = true;
-    if (settings.firstWorkDay) {
-      const firstWork = parseISO(settings.firstWorkDay);
+    if (groupFirstWorkDay) {
+      const firstWork = parseISO(groupFirstWorkDay);
       const diff = differenceInCalendarDays(date, firstWork);
-      // If diff is even, it's a work day (0, 2, 4...)
-      // If diff is odd, it's an off day (1, 3, 5...)
       isWorkDay = diff % 2 === 0;
     }
 
-    const dayLeaves = leaves.filter(l => l.date === dateStr);
+    const dayLeaves = leaves.filter(l => l.date === dateStr && groupMembers.includes(l.memberName));
     
     return { isWorkDay, dayLeaves, dateStr };
   };
@@ -84,33 +100,50 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, settings, 
           <div className="bg-white px-4 pt-5 pb-4 sm:p-6 border-b border-gray-100 flex-shrink-0">
             <div className="flex justify-between items-center">
               <div className="flex items-center">
-                <div className="bg-blue-100 p-2 rounded-full mr-3">
-                  <CalendarIcon className="h-6 w-6 text-primary" />
+                <div className={`${groupBgClass} p-2 rounded-full mr-3`}>
+                  <CalendarIcon className={`h-6 w-6 ${groupColorClass}`} />
                 </div>
                 <div>
                   <h3 className="text-xl leading-6 font-bold text-gray-900" id="modal-title">
-                    假表預覽
+                    假表預覽 ({currentGroup}班)
                   </h3>
                   <p className="text-sm text-gray-500">
                     {settings.year}年 {settings.month + 1}月 {currentUser && `(目前檢視: ${currentUser})`}
                   </p>
                 </div>
               </div>
-              <button onClick={onClose} className="text-gray-400 hover:text-gray-500 p-2 hover:bg-gray-100 rounded-full transition-colors">
-                <X className="h-6 w-6" />
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setIsZoomed(!isZoomed)}
+                  className="hidden sm:inline-flex items-center px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md transition-colors text-sm font-medium mr-2"
+                >
+                  {isZoomed ? <ZoomOut className="w-4 h-4 mr-1" /> : <ZoomIn className="w-4 h-4 mr-1" />}
+                  {isZoomed ? '縮小' : '放大'}
+                </button>
+                {/* Mobile Icon Only Zoom Button */}
+                <button
+                  onClick={() => setIsZoomed(!isZoomed)}
+                  className="sm:hidden inline-flex items-center p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full transition-colors mr-2"
+                >
+                  {isZoomed ? <ZoomOut className="w-5 h-5" /> : <ZoomIn className="w-5 h-5" />}
+                </button>
+
+                <button onClick={onClose} className="text-gray-400 hover:text-gray-500 p-2 hover:bg-gray-100 rounded-full transition-colors">
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Body */}
           <div className="flex-1 overflow-auto bg-gray-50 p-2 sm:p-4">
             
-            {/* Unified Grid View with optimized mobile landscape sizing */}
-            <div className="min-w-[500px] md:min-w-[800px] bg-white rounded-lg shadow ring-1 ring-gray-200">
+            {/* Unified Grid View with optimized sizing */}
+            <div className={`${containerMinWidth} bg-white rounded-lg shadow ring-1 ring-gray-200 transition-all duration-300`}>
               <div className="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
                 {/* Header */}
                 {WEEKDAYS.map((day) => (
-                  <div key={day} className="py-1 sm:py-3 text-center text-[10px] sm:text-sm font-semibold text-gray-700 border-r last:border-r-0 border-gray-200">
+                  <div key={day} className={`text-center font-semibold text-gray-700 border-r last:border-r-0 border-gray-200 ${headerTextSize}`}>
                     {day}
                   </div>
                 ))}
@@ -126,36 +159,38 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, settings, 
                     <div 
                       key={dateStr} 
                       style={colSpanStyle}
-                      className={`min-h-[30px] sm:min-h-[60px] md:min-h-[120px] bg-white p-0.5 sm:p-2 relative flex flex-col ${!isWorkDay ? 'bg-slate-50' : ''}`}
+                      className={`relative flex flex-col bg-white ${!isWorkDay ? 'bg-slate-50' : ''} ${cellMinHeight}`}
                     >
                       <div className="flex justify-between items-start mb-0.5">
-                        <span className={`text-[9px] sm:text-sm font-medium ${!isWorkDay ? 'text-gray-400' : 'text-gray-900'}`}>
+                        <span className={`${dateTextSize} ${!isWorkDay ? 'text-gray-400' : 'text-gray-900'}`}>
                           {format(day, 'd')}
                         </span>
                         {!isWorkDay && (
-                          <span className="text-lg sm:text-2xl md:text-4xl font-black text-slate-100 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 select-none pointer-events-none">
+                          <span className={`font-black text-slate-100 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 select-none pointer-events-none ${isZoomed ? 'text-6xl' : 'text-lg sm:text-2xl md:text-4xl'}`}>
                             O
                           </span>
                         )}
                       </div>
 
                       {isWorkDay && (
-                        <div className="space-y-0.5 sm:space-y-1 overflow-y-auto flex-1 max-h-[120px]">
+                        <div className={`space-y-0.5 sm:space-y-1 overflow-y-auto flex-1 ${leavesContainerMaxHeight}`}>
                           {dayLeaves.map((leave) => {
                             const isCurrentUser = leave.memberName === currentUser;
                             return (
                               <div 
                                 key={leave.id} 
                                 className={`
-                                  flex items-center justify-between px-0.5 py-0 sm:px-2 sm:py-1 rounded border 
+                                  flex items-center justify-between rounded border 
+                                  ${leaveWrapperPadding}
                                   ${isCurrentUser 
                                     ? 'bg-amber-100 text-amber-900 border-amber-300 font-bold ring-1 ring-amber-300 shadow-sm z-10' 
                                     : 'bg-blue-50 text-blue-700 border-blue-100'}
                                 `}
                               >
-                                <span className="truncate max-w-[80px] text-[8px] sm:text-xs leading-tight">{leave.memberName}</span>
+                                <span className={`truncate leading-tight ${leaveNameSize}`}>{leave.memberName}</span>
                                 <span className={`
-                                  px-0.5 rounded shadow-sm text-[8px] sm:text-[10px] font-medium min-w-[14px] sm:min-w-[24px] text-center ml-0.5 leading-tight
+                                  rounded shadow-sm font-medium text-center ml-0.5 leading-tight
+                                  ${leaveTypeSize}
                                   ${isCurrentUser ? 'bg-amber-200' : 'bg-white'}
                                 `}>
                                   {leave.type}

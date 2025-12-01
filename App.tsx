@@ -4,7 +4,7 @@ import SettingsPage from './pages/SettingsPage';
 import FillingPage from './pages/FillingPage';
 import LoginPage from './components/LoginPage';
 import DebugConsole from './components/DebugConsole';
-import { AppSettings, LeaveEntry, AppState, PageView } from './types';
+import { AppSettings, LeaveEntry, AppState, PageView, GroupType } from './types';
 import { STORAGE_KEY } from './constants';
 import { 
   isFirebaseEnabled, 
@@ -23,13 +23,18 @@ import { addLog } from './logger';
 const DEFAULT_SETTINGS: AppSettings = {
   year: new Date().getFullYear(),
   month: new Date().getMonth(),
-  firstWorkDay: '', 
-  members: [],
-  dailyQuotas: {},
+  firstWorkDayA: '',
+  membersA: [],
+  dailyQuotasA: {},
+  firstWorkDayB: '',
+  membersB: [],
+  dailyQuotasB: {},
 };
 
 const App: React.FC = () => {
-  const [page, setPage] = useState<PageView>('settings');
+  const [page, setPage] = useState<PageView>('filling');
+  const [currentGroup, setCurrentGroup] = useState<GroupType>('A');
+  
   const [data, setData] = useState<AppState>({
     settings: DEFAULT_SETTINGS,
     leaves: []
@@ -141,6 +146,31 @@ const App: React.FC = () => {
     };
   }, []);
 
+  const migrateData = (rawData: any): AppState => {
+    const settings = { ...DEFAULT_SETTINGS, ...rawData.settings };
+    
+    // Migration: If legacy 'members' exist but 'membersA' is empty, move them to A (default)
+    if (settings.members && settings.members.length > 0 && settings.membersA.length === 0) {
+      settings.membersA = [...settings.members];
+      delete settings.members;
+    }
+    // Migration: If legacy 'firstWorkDay' exists, move to A
+    if (settings.firstWorkDay && !settings.firstWorkDayA) {
+      settings.firstWorkDayA = settings.firstWorkDay;
+      delete settings.firstWorkDay;
+    }
+    // Migration: If legacy 'dailyQuotas' exists, move to A
+    if (settings.dailyQuotas && Object.keys(settings.dailyQuotas).length > 0 && Object.keys(settings.dailyQuotasA).length === 0) {
+      settings.dailyQuotasA = { ...settings.dailyQuotas };
+      delete settings.dailyQuotas;
+    }
+
+    return {
+      settings,
+      leaves: rawData.leaves || []
+    };
+  };
+
   // 3. Data Subscription
   useEffect(() => {
     if (isFirebaseEnabled() && user) {
@@ -148,19 +178,16 @@ const App: React.FC = () => {
         (remoteData) => {
           if (remoteData) {
             isRemoteUpdate.current = true;
-            setData(remoteData);
+            setData(migrateData(remoteData));
             localStorage.setItem(STORAGE_KEY, JSON.stringify(remoteData));
             setTimeout(() => { isRemoteUpdate.current = false; }, 100);
           } else {
-            // Migration logic for first time upload
+            // First time upload or local data found
             const stored = localStorage.getItem(STORAGE_KEY);
             if (stored) {
               try {
                 const parsed = JSON.parse(stored);
-                const initialData = {
-                  settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
-                  leaves: parsed.leaves || []
-                };
+                const initialData = migrateData(parsed);
                 setData(initialData);
                 saveDataToFirebase(initialData);
               } catch (e) { console.error(e); }
@@ -177,10 +204,7 @@ const App: React.FC = () => {
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          setData({
-            settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
-            leaves: parsed.leaves || []
-          });
+          setData(migrateData(parsed));
         } catch (e) { console.error(e); }
       }
       setDataLoading(false);
@@ -257,6 +281,8 @@ const App: React.FC = () => {
         isFirebaseConnected={isFirebaseReady}
         user={user}
         onLogout={handleLogout}
+        currentGroup={currentGroup}
+        onGroupChange={setCurrentGroup}
       />
       
       <main className="max-w-7xl mx-auto px-4 py-8">
@@ -270,8 +296,21 @@ const App: React.FC = () => {
            <div className="flex justify-center py-10"><div className="animate-spin h-8 w-8 border-b-2 border-primary rounded-full"></div></div>
         ) : (
           <>
-            {page === 'settings' && <SettingsPage settings={data.settings} onSaveSettings={handleSaveSettings} />}
-            {page === 'filling' && <FillingPage settings={data.settings} savedLeaves={data.leaves} onSaveLeaves={handleSaveLeaves} />}
+            {page === 'settings' && (
+              <SettingsPage 
+                settings={data.settings} 
+                onSaveSettings={handleSaveSettings} 
+                currentGroup={currentGroup}
+              />
+            )}
+            {page === 'filling' && (
+              <FillingPage 
+                settings={data.settings} 
+                savedLeaves={data.leaves} 
+                onSaveLeaves={handleSaveLeaves} 
+                currentGroup={currentGroup}
+              />
+            )}
           </>
         )}
       </main>

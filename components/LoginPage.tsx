@@ -36,7 +36,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, loading, onShowDebug }) 
             <div className="mx-auto bg-white/20 w-20 h-20 rounded-full flex items-center justify-center mb-4 backdrop-blur-sm shadow-inner">
                <ShieldCheck className="w-10 h-10 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-white tracking-wide shadow-black drop-shadow-sm">團隊假表管理系統</h1>
+            <h1 className="text-2xl font-bold text-white tracking-wide shadow-black drop-shadow-sm">龍岡分隊假表管理</h1>
             <p className="text-blue-100 mt-2 text-sm font-medium">請登入以存取編輯權限</p>
           </div>
         </div>
@@ -111,7 +111,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin, loading, onShowDebug }) 
           </button>
         </div>
         <div className="bg-gray-50 p-4 text-center border-t border-gray-100 flex flex-col items-center w-full">
-           <p className="text-xs text-slate-400 mb-2">© 團隊假表管理系統 | Secure Access</p>
+           <p className="text-xs text-slate-400 mb-2">© 龍岡分隊假表管理 | Secure Access</p>
            
            {onShowDebug && (
              <button onClick={onShowDebug} className="mt-1 text-[10px] text-slate-300 hover:text-slate-500 flex items-center">

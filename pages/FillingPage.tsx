@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { AppSettings, LeaveEntry, LeaveType } from '../types';
+import { AppSettings, LeaveEntry, LeaveType, GroupType } from '../types';
 import { WEEKDAYS, FULL_DAY_LEAVES, ALL_LEAVES } from '../constants';
 import { Save, AlertCircle, Plus, X, Share2 } from 'lucide-react';
 
@@ -40,9 +40,10 @@ interface FillingPageProps {
   settings: AppSettings;
   savedLeaves: LeaveEntry[]; // From App state (persistent)
   onSaveLeaves: (leaves: LeaveEntry[]) => void;
+  currentGroup: GroupType;
 }
 
-const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSaveLeaves }) => {
+const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSaveLeaves, currentGroup }) => {
   // Local state for editing, initialized from props
   const [currentLeaves, setCurrentLeaves] = useState<LeaveEntry[]>(savedLeaves);
   const [currentUser, setCurrentUser] = useState<string>('');
@@ -51,13 +52,26 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
   
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
+  // Group specific data
+  const groupMembers = currentGroup === 'A' ? settings.membersA : settings.membersB;
+  const groupFirstWorkDay = currentGroup === 'A' ? settings.firstWorkDayA : settings.firstWorkDayB;
+  const groupQuotas = currentGroup === 'A' ? settings.dailyQuotasA : settings.dailyQuotasB;
+
   // Validation Check: Are settings ready?
-  const isSettingsValid = settings.firstWorkDay && settings.members.length > 0;
+  const isSettingsValid = groupFirstWorkDay && groupMembers.length > 0;
   
+  // Style config based on group
+  const groupBgClass = currentGroup === 'A' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-teal-600 hover:bg-teal-700';
+
   // Update local state when saved data changes (e.g. initial load)
   useEffect(() => {
     setCurrentLeaves(savedLeaves);
   }, [savedLeaves]);
+
+  // Reset selected user when group changes
+  useEffect(() => {
+    setCurrentUser('');
+  }, [currentGroup]);
 
   const handleSave = () => {
     // This triggers the write to Firebase in App.tsx
@@ -72,14 +86,14 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
   };
 
   const isWorkDay = (dateStr: string) => {
-    if (!settings.firstWorkDay) return false;
+    if (!groupFirstWorkDay) return false;
     const date = parseISO(dateStr);
-    const firstWork = parseISO(settings.firstWorkDay);
+    const firstWork = parseISO(groupFirstWorkDay);
     const diff = differenceInCalendarDays(date, firstWork);
     return diff % 2 === 0;
   };
 
-  const getQuota = (dateStr: string) => settings.dailyQuotas[dateStr] || 0;
+  const getQuota = (dateStr: string) => groupQuotas[dateStr] || 0;
 
   const handleAddLeave = () => {
     if (!selectedDate || !currentUser || !selectedType) return;
@@ -89,7 +103,7 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
       date: selectedDate,
       memberName: currentUser,
       type: selectedType as LeaveType,
-      timestamp: Date.now(), // Add timestamp here
+      timestamp: Date.now(),
     };
 
     // Remove existing leave for this person on this date if exists
@@ -127,9 +141,9 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
         <AlertCircle className="w-16 h-16 text-warning mb-4" />
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">設定尚未完成</h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">{currentGroup}班 設定尚未完成</h2>
         <p className="text-gray-600 max-w-md">
-          請先返回「配額設定」頁面，設定「當月首日上班日」並新增「團隊人員」，才能開始填寫假表。
+          請先返回「配額設定」頁面，設定「{currentGroup}班當月首日上班日」並新增「團隊人員」，才能開始填寫假表。
         </p>
       </div>
     );
@@ -140,10 +154,11 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
       {/* Header Actions */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
         <div>
-          <h1 className="text-lg sm:text-2xl font-bold text-gray-900">
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
+            <span className={`mr-2 px-2 py-0.5 rounded text-white text-base ${currentGroup === 'A' ? 'bg-indigo-500' : 'bg-teal-500'}`}>{currentGroup}班</span>
             {settings.year}年 {settings.month + 1}月 假表填寫
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+          <p className="text-base sm:text-sm text-gray-500 mt-1">
             請選擇您的姓名，點擊上班日期進行填寫。
           </p>
         </div>
@@ -151,14 +166,14 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
            <button 
             onClick={handleCopyLink}
-            className="flex-1 md:flex-none justify-center inline-flex items-center px-3 py-2 border border-gray-300 rounded-md shadow-sm text-xs sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            className="flex-1 md:flex-none justify-center inline-flex items-center px-3 py-3 sm:py-2 border border-gray-300 rounded-md shadow-sm text-sm sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             <Share2 className="w-4 h-4 mr-2" />
             分享
           </button>
           <button 
             onClick={handleSave}
-            className="flex-1 md:flex-none justify-center inline-flex items-center px-3 py-2 border border-transparent rounded-md shadow-sm text-xs sm:text-sm font-medium text-white bg-primary hover:bg-blue-600"
+            className={`flex-1 md:flex-none justify-center inline-flex items-center px-3 py-3 sm:py-2 border border-transparent rounded-md shadow-sm text-sm sm:text-sm font-medium text-white transition-colors ${groupBgClass}`}
           >
             <Save className="w-4 h-4 mr-2" />
             儲存
@@ -173,33 +188,31 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
       )}
 
       {/* User Selector */}
-      <div className="bg-white p-2 sm:p-4 rounded-lg shadow mb-4 flex items-center space-x-2 sm:space-x-4 sticky top-16 z-40 border-b border-gray-100">
-        <label className="text-xs sm:text-sm font-bold text-gray-700 whitespace-nowrap">我是：</label>
+      <div className="bg-white p-3 sm:p-4 rounded-lg shadow mb-4 flex items-center space-x-2 sm:space-x-4 sticky top-16 z-40 border-b border-gray-100">
+        <label className="text-base sm:text-sm font-bold text-gray-700 whitespace-nowrap">我是：</label>
         <select 
           value={currentUser} 
           onChange={(e) => setCurrentUser(e.target.value)}
-          className="block w-full max-w-xs rounded-md border-gray-300 border p-1.5 sm:p-2 text-sm shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
+          className={`block w-full max-w-xs rounded-md border-gray-300 border p-2 sm:p-2 text-base sm:text-sm shadow-sm focus:ring focus:ring-opacity-50 ${currentGroup === 'A' ? 'focus:border-indigo-500 focus:ring-indigo-500' : 'focus:border-teal-500 focus:ring-teal-500'}`}
         >
           <option value="">-- 請選擇姓名 --</option>
-          {settings.members.map(m => (
+          {groupMembers.map(m => (
             <option key={m} value={m}>{m}</option>
           ))}
         </select>
-        {!currentUser && <span className="text-xs sm:text-sm text-red-500 animate-pulse font-medium">請先選擇姓名</span>}
+        {!currentUser && <span className="text-sm sm:text-sm text-red-500 animate-pulse font-medium">請先選擇姓名</span>}
       </div>
 
-      {/* Calendar Grid Container - Optimized for Mobile Landscape */}
+      {/* Calendar Grid Container */}
       <div className="bg-white shadow rounded-lg overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
-          {/* 
-              Compact width 500px allows fitting on smaller landscape screens
-          */}
-          <div className="min-w-[500px] md:min-w-[800px]"> 
+          {/* INCREASED MIN-WIDTH TO 900px FOR MOBILE TO FIT CONTENT */}
+          <div className="min-w-[900px]"> 
             
             {/* Grid Header */}
             <div className="grid grid-cols-7 gap-px bg-gray-200 border-b border-gray-200">
               {WEEKDAYS.map(day => (
-                <div key={day} className="bg-gray-50 py-1 sm:py-3 text-center text-[10px] sm:text-sm font-bold text-gray-700">
+                <div key={day} className="bg-gray-50 py-2 sm:py-3 text-center text-sm sm:text-sm font-bold text-gray-700">
                   {day}
                 </div>
               ))}
@@ -211,7 +224,12 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                 const dateStr = format(day, 'yyyy-MM-dd');
                 const workDay = isWorkDay(dateStr);
                 const quota = getQuota(dateStr);
-                const dayLeaves = currentLeaves.filter(l => l.date === dateStr);
+                
+                // Filter leaves to show ONLY members of current group
+                const dayLeaves = currentLeaves.filter(l => 
+                  l.date === dateStr && groupMembers.includes(l.memberName)
+                );
+                
                 const leavesCount = dayLeaves.length;
                 const isOverQuota = quota > 0 && leavesCount > quota; 
                 
@@ -221,18 +239,17 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                   <div 
                     key={dateStr}
                     style={colSpanStyle}
-                    // Extremely reduced min-height [30px] for compact mobile view
-                    className={`min-h-[30px] sm:min-h-[60px] md:min-h-[120px] bg-white relative flex flex-col ${!workDay ? 'bg-slate-50' : ''}`}
+                    className={`min-h-[50px] sm:min-h-[60px] md:min-h-[120px] bg-white relative flex flex-col ${!workDay ? 'bg-slate-50' : ''}`}
                   >
                     {/* Day Header */}
-                    <div className="flex justify-between items-start p-0.5 sm:p-2">
-                      <span className={`text-[9px] sm:text-sm font-medium ${!workDay ? 'text-gray-400' : 'text-gray-900'}`}>
+                    <div className="flex justify-between items-start p-1 sm:p-2">
+                      <span className={`text-base sm:text-sm font-medium ${!workDay ? 'text-gray-400' : 'text-gray-900'}`}>
                         {format(day, 'd')}
                       </span>
                       {workDay && quota > 0 && (
-                        <div className={`flex items-center text-[8px] sm:text-xs px-0.5 py-0 sm:px-1.5 sm:py-0.5 rounded-full ${isOverQuota ? 'bg-red-100 text-red-700 font-bold' : 'bg-green-100 text-green-700'}`}>
+                        <div className={`flex items-center text-xs sm:text-xs px-1 py-0.5 sm:px-1.5 sm:py-0.5 rounded-full ${isOverQuota ? 'bg-red-100 text-red-700 font-bold' : 'bg-green-100 text-green-700'}`}>
                           {leavesCount}/{quota}
-                          {isOverQuota && <AlertCircle className="w-2 h-2 sm:w-3 sm:h-3 ml-0.5" />}
+                          {isOverQuota && <AlertCircle className="w-3 h-3 ml-0.5" />}
                         </div>
                       )}
                     </div>
@@ -240,10 +257,10 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                     {/* Content */}
                     {!workDay ? (
                       <div className="flex-1 flex items-center justify-center">
-                          <span className="text-lg sm:text-2xl md:text-5xl font-black text-slate-200 select-none">O</span>
+                          <span className="text-4xl sm:text-2xl md:text-5xl font-black text-slate-200 select-none">O</span>
                       </div>
                     ) : (
-                      <div className="flex-1 px-0.5 pb-0.5 sm:px-2 sm:pb-2 flex flex-col gap-0.5 sm:gap-1">
+                      <div className="flex-1 px-0.5 pb-0.5 sm:px-2 sm:pb-2 flex flex-col gap-1 sm:gap-1">
                         {/* Render existing leaves */}
                         {dayLeaves.map(leave => {
                           const isCurrentUser = currentUser === leave.memberName;
@@ -251,20 +268,20 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                             <div 
                               key={leave.id} 
                               className={`
-                                flex justify-between items-center px-0.5 py-0 sm:px-2 sm:py-1.5 rounded border group
+                                flex justify-between items-center px-1 py-0.5 sm:px-2 sm:py-1.5 rounded border group
                                 ${isCurrentUser 
                                   ? 'bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-300 z-10' 
                                   : 'bg-blue-50 text-blue-700 border-blue-100'}
                               `}
                             >
-                              <div className="flex-1 flex justify-between items-center overflow-hidden mr-0.5">
-                                <span className="font-bold truncate text-[8px] sm:text-xs leading-tight">{leave.memberName}</span>
-                                <span className="font-bold whitespace-nowrap text-[8px] sm:text-xs leading-tight ml-0.5">{leave.type}</span>
+                              <div className="flex-1 flex justify-between items-center overflow-hidden mr-1">
+                                <span className="font-bold truncate text-xs sm:text-xs leading-tight">{leave.memberName}</span>
+                                <span className="font-bold whitespace-nowrap text-xs sm:text-xs leading-tight ml-1">{leave.type}</span>
                               </div>
                               {/* Only allow deleting if it's the current user */}
                               {(currentUser === leave.memberName) && (
-                                <button onClick={(e) => { e.stopPropagation(); handleRemoveLeave(leave.id); }} className="text-gray-400 hover:text-red-600 ml-0.5">
-                                  <X className="w-2 h-2 sm:w-3.5 sm:h-3.5" />
+                                <button onClick={(e) => { e.stopPropagation(); handleRemoveLeave(leave.id); }} className="text-gray-400 hover:text-red-600 ml-1">
+                                  <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                 </button>
                               )}
                             </div>
@@ -275,9 +292,9 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                         {currentUser && quota > 0 && (
                           <button 
                             onClick={() => { setSelectedDate(dateStr); setSelectedType(''); }}
-                            className="mt-auto w-full flex justify-center items-center py-0 sm:py-1 border-2 border-dashed border-gray-200 rounded text-gray-400 hover:border-primary hover:text-primary transition-colors text-[8px] sm:text-xs h-3.5 sm:h-auto"
+                            className={`mt-auto w-full flex justify-center items-center py-1 sm:py-1 border-2 border-dashed border-gray-200 rounded text-gray-400 transition-colors text-xs sm:text-xs h-6 sm:h-auto ${currentGroup === 'A' ? 'hover:border-indigo-500 hover:text-indigo-500' : 'hover:border-teal-500 hover:text-teal-500'}`}
                           >
-                            <Plus className="w-2 h-2 sm:w-3 sm:h-3" />
+                            <Plus className="w-3 h-3 sm:w-3 sm:h-3" />
                           </button>
                         )}
                       </div>
@@ -302,10 +319,10 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
                  <div className="sm:flex sm:items-start">
                    <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                     <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4" id="modal-title">
-                       新增假單 - {selectedDate}
+                     <h3 className="text-xl leading-6 font-medium text-gray-900 mb-4" id="modal-title">
+                       新增假單 - {selectedDate} ({currentGroup}班)
                      </h3>
-                     <div className="mb-4 text-sm text-gray-500">
+                     <div className="mb-4 text-base text-gray-500">
                        <p>填寫人：<span className="font-bold text-gray-900">{currentUser}</span></p>
                        <p>當日配額：{getQuota(selectedDate)} ({isIntegerQuota ? '可選一般假別' : '可選一般假別 + 外宿'})</p>
                      </div>
@@ -315,7 +332,7 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                           <button
                             key={type}
                             onClick={() => setSelectedType(type)}
-                            className={`p-2 text-sm rounded border ${selectedType === type ? 'bg-primary text-white border-primary' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                            className={`p-3 text-base rounded border ${selectedType === type ? `${groupBgClass} text-white border-transparent` : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
                           >
                             {type}
                           </button>
@@ -324,18 +341,18 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                    </div>
                  </div>
                </div>
-               <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
+               <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2 sm:gap-0">
                  <button
                    type="button"
                    disabled={!selectedType}
-                   className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-primary text-base font-medium text-white hover:bg-blue-700 focus:outline-none disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm"
+                   className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-3 text-base font-medium text-white focus:outline-none disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm transition-colors ${groupBgClass}`}
                    onClick={handleAddLeave}
                  >
                    確定新增
                  </button>
                  <button
                    type="button"
-                   className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:text-gray-500 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                   className="mt-2 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-3 bg-white text-base font-medium text-gray-700 hover:text-gray-500 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
                    onClick={() => setSelectedDate(null)}
                  >
                    取消

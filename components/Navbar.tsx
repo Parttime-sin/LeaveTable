@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Settings, Calendar, LogOut, User as UserIcon, ShieldCheck, Menu, X } from 'lucide-react';
 import { User } from 'firebase/auth';
-import { PageView } from '../types';
+import { PageView, GroupType } from '../types';
 
 interface NavbarProps {
   currentPage: PageView;
@@ -9,6 +9,8 @@ interface NavbarProps {
   isFirebaseConnected: boolean;
   user: User | null;
   onLogout: () => void;
+  currentGroup: GroupType;
+  onGroupChange: (group: GroupType) => void;
 }
 
 const Navbar: React.FC<NavbarProps> = ({ 
@@ -16,7 +18,9 @@ const Navbar: React.FC<NavbarProps> = ({
   onNavigate, 
   isFirebaseConnected, 
   user, 
-  onLogout 
+  onLogout,
+  currentGroup,
+  onGroupChange
 }) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -29,23 +33,12 @@ const Navbar: React.FC<NavbarProps> = ({
           <div className="flex items-center">
             <div className="flex-shrink-0 flex items-center text-primary cursor-pointer" onClick={() => onNavigate('filling')}>
               <ShieldCheck className="h-8 w-8 mr-2" />
-              <span className="font-bold text-lg hidden sm:block tracking-tight text-slate-800">團隊假表管理</span>
-              <span className="font-bold text-lg sm:hidden text-slate-800">假表系統</span>
+              <span className="font-bold text-lg hidden sm:block tracking-tight text-slate-800">龍岡分隊假表管理</span>
+              <span className="font-bold text-lg sm:hidden text-slate-800">龍岡分隊</span>
             </div>
             
             {/* Desktop Navigation Links */}
             <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
-              <button
-                onClick={() => onNavigate('filling')}
-                className={`inline-flex items-center px-3 pt-1 border-b-2 text-sm font-medium h-full transition-all ${
-                  currentPage === 'filling'
-                    ? 'border-primary text-primary'
-                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
-                }`}
-              >
-                <Calendar className="w-4 h-4 mr-2" />
-                假表填寫
-              </button>
               <button
                 onClick={() => onNavigate('settings')}
                 className={`inline-flex items-center px-3 pt-1 border-b-2 text-sm font-medium h-full transition-all ${
@@ -57,7 +50,42 @@ const Navbar: React.FC<NavbarProps> = ({
                 <Settings className="w-4 h-4 mr-2" />
                 配額設定
               </button>
+              <button
+                onClick={() => onNavigate('filling')}
+                className={`inline-flex items-center px-3 pt-1 border-b-2 text-sm font-medium h-full transition-all ${
+                  currentPage === 'filling'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                }`}
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                假表填寫
+              </button>
             </div>
+          </div>
+
+          {/* Group Switcher (Center-Right) */}
+          <div className="flex items-center space-x-2 mx-4">
+            <button
+              onClick={() => onGroupChange('A')}
+              className={`px-3 py-1 rounded-md text-sm font-bold transition-all border-2 ${
+                currentGroup === 'A'
+                  ? 'bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm'
+                  : 'bg-white border-transparent text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              A班
+            </button>
+            <button
+              onClick={() => onGroupChange('B')}
+              className={`px-3 py-1 rounded-md text-sm font-bold transition-all border-2 ${
+                currentGroup === 'B'
+                  ? 'bg-teal-50 border-teal-500 text-teal-700 shadow-sm'
+                  : 'bg-white border-transparent text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              B班
+            </button>
           </div>
 
           {/* User Profile & Actions (Desktop) */}
@@ -115,17 +143,6 @@ const Navbar: React.FC<NavbarProps> = ({
         <div className="sm:hidden border-t border-slate-100 bg-white">
           <div className="pt-2 pb-3 space-y-1">
             <button
-              onClick={() => { onNavigate('filling'); setIsMobileMenuOpen(false); }}
-              className={`w-full flex items-center pl-3 pr-4 py-3 border-l-4 text-base font-medium transition-colors ${
-                currentPage === 'filling'
-                  ? 'bg-blue-50 border-primary text-primary'
-                  : 'border-transparent text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-800'
-              }`}
-            >
-              <Calendar className="w-5 h-5 mr-3" />
-              假表填寫
-            </button>
-            <button
               onClick={() => { onNavigate('settings'); setIsMobileMenuOpen(false); }}
               className={`w-full flex items-center pl-3 pr-4 py-3 border-l-4 text-base font-medium transition-colors ${
                 currentPage === 'settings'
@@ -136,29 +153,29 @@ const Navbar: React.FC<NavbarProps> = ({
               <Settings className="w-5 h-5 mr-3" />
               配額設定
             </button>
+            <button
+              onClick={() => { onNavigate('filling'); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center pl-3 pr-4 py-3 border-l-4 text-base font-medium transition-colors ${
+                currentPage === 'filling'
+                  ? 'bg-blue-50 border-primary text-primary'
+                  : 'border-transparent text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-800'
+              }`}
+            >
+              <Calendar className="w-5 h-5 mr-3" />
+              假表填寫
+            </button>
           </div>
           
-          {/* Mobile User Section */}
+          {/* Mobile User Section (Simplified) */}
           <div className="pt-4 pb-4 border-t border-slate-200 bg-slate-50">
             {isFirebaseConnected && user ? (
-              <div className="flex items-center px-4">
-                <div className="flex-shrink-0">
-                  {user.photoURL ? (
-                    <img className="h-10 w-10 rounded-full border border-slate-200" src={user.photoURL} alt="" />
-                  ) : (
-                    <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center">
-                      <UserIcon className="h-6 w-6 text-slate-400" />
-                    </div>
-                  )}
-                </div>
-                <div className="ml-3">
-                  <div className="text-base font-medium text-slate-800">{user.displayName || '使用者'}</div>
-                  <div className="text-sm font-medium text-slate-500">{user.email}</div>
-                </div>
+              <div className="flex justify-end px-4">
                 <button
                   onClick={onLogout}
-                  className="ml-auto flex-shrink-0 p-2 rounded-full bg-white text-slate-400 hover:text-red-600 shadow-sm border border-slate-200"
+                  className="flex items-center px-4 py-2 rounded-md bg-white text-slate-600 hover:text-red-600 shadow-sm border border-slate-200 transition-colors"
+                  title="登出"
                 >
+                  <span className="mr-2 font-medium">登出</span>
                   <LogOut className="w-5 h-5" />
                 </button>
               </div>

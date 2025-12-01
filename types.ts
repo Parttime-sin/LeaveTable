@@ -13,13 +13,26 @@ export enum LeaveType {
   Overnight = '外宿'
 }
 
+export type GroupType = 'A' | 'B';
+
 export interface AppSettings {
   year: number;
   month: number; // 0-11 for Jan-Dec
-  firstWorkDay: string; // ISO Date string YYYY-MM-DD
-  members: string[];
-  // Map of date string (YYYY-MM-DD) to quota number (e.g., 2 or 0.5)
-  dailyQuotas: Record<string, number>; 
+  
+  // Group A Settings
+  firstWorkDayA: string; // ISO Date string YYYY-MM-DD
+  membersA: string[];
+  dailyQuotasA: Record<string, number>; 
+
+  // Group B Settings
+  firstWorkDayB: string;
+  membersB: string[];
+  dailyQuotasB: Record<string, number>;
+  
+  // Legacy fields for migration support (optional)
+  firstWorkDay?: string;
+  members?: string[];
+  dailyQuotas?: Record<string, number>;
 }
 
 export interface LeaveEntry {
