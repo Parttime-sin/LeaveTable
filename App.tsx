@@ -5,7 +5,7 @@ import FillingPage from './pages/FillingPage';
 import LoginPage from './components/LoginPage';
 import { AppSettings, LeaveEntry, AppState, PageView } from './types';
 import { STORAGE_KEY } from './constants';
-import { isFirebaseEnabled, subscribeToData, saveDataToFirebase, auth, loginWithGoogle, logout } from './firebase';
+import { isFirebaseEnabled, subscribeToData, saveDataToFirebase, auth, loginWithGoogle, logout, checkRedirectResult } from './firebase';
 import { User } from 'firebase/auth';
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -54,7 +54,36 @@ const App: React.FC = () => {
     }
   }, []);
 
-  // 3. Data Subscription (Depends on Auth)
+  // Common Error Handler for Auth
+  const handleAuthError = (error: any) => {
+      console.error("Auth Error:", error);
+      let msg = "登入失敗，請重試。";
+      
+      if (error.code === 'auth/popup-closed-by-user') {
+        msg = "登入視窗已被關閉，請再試一次。";
+      } else if (error.code === 'auth/cancelled-popup-request') {
+         msg = "已有一個登入視窗開啟中，請關閉後重試。";
+      } else if (error.code === 'auth/unauthorized-domain') {
+        msg = `網域未授權 (${window.location.hostname})。\n請至 Firebase Console > Authentication > Settings > Authorized Domains 新增此網域。`;
+      } else if (error.code === 'auth/operation-not-allowed') {
+        msg = "Google 登入功能尚未啟用。\n請至 Firebase Console > Authentication > Sign-in method 啟用 Google 提供者。";
+      } else if (error.code === 'auth/api-key-not-valid') {
+        msg = "API Key 設定錯誤，請檢查 .env 檔案。";
+      } else if (error.message) {
+        msg = `登入發生錯誤 (${error.code || 'unknown'}): ${error.message}`;
+      }
+      
+      alert(msg);
+  };
+
+  // 3. Check for Redirect Result (for Mobile Login flows)
+  useEffect(() => {
+    if (isFirebaseEnabled()) {
+      checkRedirectResult().catch(handleAuthError);
+    }
+  }, []);
+
+  // 4. Data Subscription (Depends on Auth)
   useEffect(() => {
     const firebaseEnabled = isFirebaseEnabled();
     
@@ -125,31 +154,23 @@ const App: React.FC = () => {
 
   const handleLogin = async () => {
     setLoginLoading(true);
+    
+    // Detect Mobile
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
     try {
-      await loginWithGoogle();
-      // Auth listener will handle state update
+      await loginWithGoogle(isMobile);
+      // If mobile, it will redirect, and the code below won't strictly finish execution before unload.
+      // If desktop, it waits for popup.
     } catch (error: any) {
-      console.error("Detailed Login Error:", error);
-      let msg = "登入失敗，請重試。";
-      
-      // Parse specific Firebase Auth errors
-      if (error.code === 'auth/popup-closed-by-user') {
-        msg = "登入視窗已被關閉，請再試一次。";
-      } else if (error.code === 'auth/cancelled-popup-request') {
-         msg = "已有一個登入視窗開啟中，請關閉後重試。";
-      } else if (error.code === 'auth/unauthorized-domain') {
-        msg = `網域未授權 (${window.location.hostname})。\n請至 Firebase Console > Authentication > Settings > Authorized Domains 新增此網域。`;
-      } else if (error.code === 'auth/operation-not-allowed') {
-        msg = "Google 登入功能尚未啟用。\n請至 Firebase Console > Authentication > Sign-in method 啟用 Google 提供者。";
-      } else if (error.code === 'auth/api-key-not-valid') {
-        msg = "API Key 設定錯誤，請檢查 .env 檔案。";
-      } else if (error.message) {
-        msg = `登入發生錯誤 (${error.code || 'unknown'}): ${error.message}`;
-      }
-      
-      alert(msg);
-    } finally {
+      handleAuthError(error);
       setLoginLoading(false);
+    } finally {
+      // Only reset loading if we are NOT redirecting (Desktop)
+      // If we are redirecting, the page will reload anyway, or if it failed immediately it was caught above
+      if (!isMobile) {
+         setLoginLoading(false);
+      }
     }
   };
 
