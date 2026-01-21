@@ -56,6 +56,7 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
   const groupMembers = currentGroup === 'A' ? settings.membersA : settings.membersB;
   const groupFirstWorkDay = currentGroup === 'A' ? settings.firstWorkDayA : settings.firstWorkDayB;
   const groupQuotas = currentGroup === 'A' ? settings.dailyQuotasA : settings.dailyQuotasB;
+  const groupExceptions = currentGroup === 'A' ? (settings.shiftExceptionsA || {}) : (settings.shiftExceptionsB || {});
 
   // Validation Check: Are settings ready?
   const isSettingsValid = groupFirstWorkDay && groupMembers.length > 0;
@@ -63,18 +64,15 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
   // Style config based on group
   const groupBgClass = currentGroup === 'A' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-teal-600 hover:bg-teal-700';
 
-  // Update local state when saved data changes (e.g. initial load)
   useEffect(() => {
     setCurrentLeaves(savedLeaves);
   }, [savedLeaves]);
 
-  // Reset selected user when group changes
   useEffect(() => {
     setCurrentUser('');
   }, [currentGroup]);
 
   const handleSave = () => {
-    // This triggers the write to Firebase in App.tsx
     onSaveLeaves(currentLeaves);
     setShowSaveSuccess(true);
     setTimeout(() => setShowSaveSuccess(false), 3000);
@@ -85,7 +83,14 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
     alert('連結已複製！');
   };
 
+  // Updated logic to respect exceptions
   const isWorkDay = (dateStr: string) => {
+    // 1. Check Exceptions
+    if (groupExceptions[dateStr] !== undefined) {
+      return groupExceptions[dateStr];
+    }
+
+    // 2. Fallback
     if (!groupFirstWorkDay) return false;
     const date = parseISO(dateStr);
     const firstWork = parseISO(groupFirstWorkDay);
@@ -106,13 +111,11 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
       timestamp: Date.now(),
     };
 
-    // Remove existing leave for this person on this date if exists
     const filtered = currentLeaves.filter(l => !(l.date === selectedDate && l.memberName === currentUser));
     
     const updatedList = [...filtered, newLeave];
     setCurrentLeaves(updatedList);
     
-    // Reset form (Empty the form)
     setSelectedType('');
     setSelectedDate(null); 
   };
@@ -121,16 +124,13 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
     setCurrentLeaves(prev => prev.filter(l => l.id !== id));
   };
 
-  // Calendar setup
   const monthStart = startOfMonth(new Date(settings.year, settings.month));
   const monthEnd = endOfMonth(monthStart);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-  // Modal logic inside render
   const quotaForSelected = selectedDate ? getQuota(selectedDate) : 0;
   const isIntegerQuota = Number.isInteger(quotaForSelected);
   
-  // Available leave types based on quota
   const availableLeaveTypes = !selectedDate 
     ? [] 
     : isIntegerQuota 
@@ -151,7 +151,6 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
 
   return (
     <div className="max-w-7xl mx-auto py-2 sm:py-8 px-2 sm:px-6 lg:px-8">
-      {/* Header Actions */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
@@ -187,7 +186,6 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
         </div>
       )}
 
-      {/* User Selector */}
       <div className="bg-white p-3 sm:p-4 rounded-lg shadow mb-4 flex items-center space-x-2 sm:space-x-4 sticky top-16 z-40 border-b border-gray-100">
         <label className="text-base sm:text-sm font-bold text-gray-700 whitespace-nowrap">我是：</label>
         <select 
@@ -203,13 +201,10 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
         {!currentUser && <span className="text-sm sm:text-sm text-red-500 animate-pulse font-medium">請先選擇姓名</span>}
       </div>
 
-      {/* Calendar Grid Container */}
       <div className="bg-white shadow rounded-lg overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
-          {/* INCREASED MIN-WIDTH TO 900px FOR MOBILE TO FIT CONTENT */}
           <div className="min-w-[900px]"> 
             
-            {/* Grid Header */}
             <div className="grid grid-cols-7 gap-px bg-gray-200 border-b border-gray-200">
               {WEEKDAYS.map(day => (
                 <div key={day} className="bg-gray-50 py-2 sm:py-3 text-center text-sm sm:text-sm font-bold text-gray-700">
@@ -218,14 +213,12 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
               ))}
             </div>
 
-            {/* Grid Body */}
             <div className="grid grid-cols-7 gap-px bg-gray-200">
               {daysInMonth.map((day, dayIdx) => {
                 const dateStr = format(day, 'yyyy-MM-dd');
                 const workDay = isWorkDay(dateStr);
                 const quota = getQuota(dateStr);
                 
-                // Filter leaves to show ONLY members of current group
                 const dayLeaves = currentLeaves.filter(l => 
                   l.date === dateStr && groupMembers.includes(l.memberName)
                 );
@@ -241,7 +234,6 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                     style={colSpanStyle}
                     className={`min-h-[50px] sm:min-h-[60px] md:min-h-[120px] bg-white relative flex flex-col ${!workDay ? 'bg-slate-50' : ''}`}
                   >
-                    {/* Day Header */}
                     <div className="flex justify-between items-start p-1 sm:p-2">
                       <span className={`text-base sm:text-sm font-medium ${!workDay ? 'text-gray-400' : 'text-gray-900'}`}>
                         {format(day, 'd')}
@@ -254,14 +246,12 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                       )}
                     </div>
 
-                    {/* Content */}
                     {!workDay ? (
                       <div className="flex-1 flex items-center justify-center">
                           <span className="text-4xl sm:text-2xl md:text-5xl font-black text-slate-200 select-none">O</span>
                       </div>
                     ) : (
                       <div className="flex-1 px-0.5 pb-0.5 sm:px-2 sm:pb-2 flex flex-col gap-1 sm:gap-1">
-                        {/* Render existing leaves */}
                         {dayLeaves.map(leave => {
                           const isCurrentUser = currentUser === leave.memberName;
                           return (
@@ -278,7 +268,6 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                                 <span className="font-bold truncate text-xs sm:text-xs leading-tight">{leave.memberName}</span>
                                 <span className="font-bold whitespace-nowrap text-xs sm:text-xs leading-tight ml-1">{leave.type}</span>
                               </div>
-                              {/* Only allow deleting if it's the current user */}
                               {(currentUser === leave.memberName) && (
                                 <button onClick={(e) => { e.stopPropagation(); handleRemoveLeave(leave.id); }} className="text-gray-400 hover:text-red-600 ml-1">
                                   <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
@@ -288,7 +277,6 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                           );
                         })}
 
-                        {/* Add Button */}
                         {currentUser && quota > 0 && (
                           <button 
                             onClick={() => { setSelectedDate(dateStr); setSelectedType(''); }}
@@ -308,7 +296,6 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
         </div>
       </div>
 
-      {/* Add Leave Modal */}
       {selectedDate && (
         <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
