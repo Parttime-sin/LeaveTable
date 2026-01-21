@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Calendar, AlertTriangle, Plus, Trash2, ArrowLeft, ArrowRight, CheckCircle2, Sliders, Eraser, Save, Lock, Unlock, Edit, CalendarRange } from 'lucide-react';
+import { Users, Calendar, AlertTriangle, Plus, Trash2, ArrowLeft, ArrowRight, Sliders, Eraser, Save, Lock, Edit, CalendarRange } from 'lucide-react';
 import { AppSettings, GroupType } from '../types';
 
 // --- Local Date Helpers ---
