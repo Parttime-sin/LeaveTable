@@ -1,0 +1,314 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1776509688106,
+  "projectRoot": "c:\\Users\\User\\Desktop\\LeaveTable",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "react",
+        "version": "18.3.1",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "18.3.1",
+        "category": "frontend"
+      },
+      {
+        "name": "vite",
+        "version": "5.4.1",
+        "category": "build"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "vite",
+      "build": "tsc && vite build",
+      "preview": "vite preview",
+      "predeploy": "npm run build",
+      "deploy": "gh-pages -d dist"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "components",
+      "pages"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "components": {
+      "path": "components",
+      "purpose": "UI components",
+      "fileCount": 4,
+      "lastAccessed": 1776509687776,
+      "keyFiles": [
+        "DebugConsole.tsx",
+        "LoginPage.tsx",
+        "Navbar.tsx",
+        "PreviewModal.tsx"
+      ]
+    },
+    "functions": {
+      "path": "functions",
+      "purpose": null,
+      "fileCount": 4,
+      "lastAccessed": 1776509687778,
+      "keyFiles": [
+        "package-lock.json",
+        "package.json",
+        "tsconfig.json"
+      ]
+    },
+    "pages": {
+      "path": "pages",
+      "purpose": "Page components",
+      "fileCount": 2,
+      "lastAccessed": 1776509687795,
+      "keyFiles": [
+        "FillingPage.tsx",
+        "SettingsPage.tsx"
+      ]
+    },
+    "functions\\lib": {
+      "path": "functions\\lib",
+      "purpose": "Library code",
+      "fileCount": 2,
+      "lastAccessed": 1776509687852,
+      "keyFiles": [
+        "index.js",
+        "index.js.map"
+      ]
+    },
+    "functions\\node_modules": {
+      "path": "functions\\node_modules",
+      "purpose": "Dependencies",
+      "fileCount": 1,
+      "lastAccessed": 1776509687873,
+      "keyFiles": []
+    },
+    "functions\\src": {
+      "path": "functions\\src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1776509687876,
+      "keyFiles": [
+        "index.ts"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "App.tsx",
+      "accessCount": 13,
+      "lastAccessed": 1776525229919,
+      "type": "file"
+    },
+    {
+      "path": "components\\PreviewModal.tsx",
+      "accessCount": 11,
+      "lastAccessed": 1776525333311,
+      "type": "file"
+    },
+    {
+      "path": "pages\\SettingsPage.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1776525147633,
+      "type": "file"
+    },
+    {
+      "path": "pages\\FillingPage.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1776525214816,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 6,
+      "lastAccessed": 1776525250815,
+      "type": "directory"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 5,
+      "lastAccessed": 1776522413195,
+      "type": "file"
+    },
+    {
+      "path": "types.ts",
+      "accessCount": 5,
+      "lastAccessed": 1776523835782,
+      "type": "file"
+    },
+    {
+      "path": "firebase.ts",
+      "accessCount": 5,
+      "lastAccessed": 1776523884012,
+      "type": "file"
+    },
+    {
+      "path": "constants.ts",
+      "accessCount": 5,
+      "lastAccessed": 1776525294516,
+      "type": "file"
+    },
+    {
+      "path": "firebase.json",
+      "accessCount": 4,
+      "lastAccessed": 1776521973513,
+      "type": "file"
+    },
+    {
+      "path": "functions\\src\\index.ts",
+      "accessCount": 4,
+      "lastAccessed": 1776522806145,
+      "type": "file"
+    },
+    {
+      "path": "tsconfig.json",
+      "accessCount": 4,
+      "lastAccessed": 1776522815889,
+      "type": "file"
+    },
+    {
+      "path": "vite.config.ts",
+      "accessCount": 4,
+      "lastAccessed": 1776522821373,
+      "type": "file"
+    },
+    {
+      "path": "logger.ts",
+      "accessCount": 3,
+      "lastAccessed": 1776510067188,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 3,
+      "lastAccessed": 1776510075514,
+      "type": "file"
+    },
+    {
+      "path": "components\\Navbar.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1776523905192,
+      "type": "file"
+    },
+    {
+      "path": "index.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1776510065979,
+      "type": "file"
+    },
+    {
+      "path": "components\\LoginPage.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1776510066928,
+      "type": "file"
+    },
+    {
+      "path": "components\\DebugConsole.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1776520706197,
+      "type": "file"
+    },
+    {
+      "path": "index.html",
+      "accessCount": 1,
+      "lastAccessed": 1776510062159,
+      "type": "file"
+    },
+    {
+      "path": "functions\\package.json",
+      "accessCount": 1,
+      "lastAccessed": 1776510062262,
+      "type": "file"
+    },
+    {
+      "path": "firestore.rules",
+      "accessCount": 1,
+      "lastAccessed": 1776521968248,
+      "type": "file"
+    },
+    {
+      "path": "components\\ErrorBoundary.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776521994485,
+      "type": "file"
+    },
+    {
+      "path": "utils\\dateHelpers.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776522234887,
+      "type": "file"
+    },
+    {
+      "path": "utils\\shiftLogic.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776522436441,
+      "type": "file"
+    },
+    {
+      "path": "utils\\firestoreSchema.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776522446200,
+      "type": "file"
+    },
+    {
+      "path": "utils\\shiftLogic.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776522457778,
+      "type": "file"
+    },
+    {
+      "path": "utils\\firestoreSchema.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776522466821,
+      "type": "file"
+    },
+    {
+      "path": "utils\\dateHelpers.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1776522478239,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

@@ -1,149 +1,95 @@
 import React, { useState, useEffect } from 'react';
-import { AppSettings, LeaveEntry, LeaveType, GroupType } from '../types';
+import { MonthlySettings, MonthlyLeaveEntry, LeaveType } from '../types';
 import { WEEKDAYS, FULL_DAY_LEAVES, ALL_LEAVES } from '../constants';
-import { Save, AlertCircle, Plus, X, Share2 } from 'lucide-react';
-
-// Local date helpers to replace date-fns
-const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
-const endOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0);
-const eachDayOfInterval = ({ start, end }: { start: Date, end: Date }) => {
-  const days: Date[] = [];
-  const curr = new Date(start);
-  while (curr <= end) {
-    days.push(new Date(curr));
-    curr.setDate(curr.getDate() + 1);
-  }
-  return days;
-};
-const format = (date: Date, fmt: string) => {
-  if (fmt === 'yyyy-MM-dd') {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
-  if (fmt === 'd') return String(date.getDate());
-  return '';
-};
-const getDay = (date: Date) => date.getDay();
-const parseISO = (str: string) => {
-  const [y, m, d] = str.split('-').map(Number);
-  return new Date(y, m - 1, d);
-};
-const differenceInCalendarDays = (dateLeft: Date, dateRight: Date) => {
-  const utcA = Date.UTC(dateLeft.getFullYear(), dateLeft.getMonth(), dateLeft.getDate());
-  const utcB = Date.UTC(dateRight.getFullYear(), dateRight.getMonth(), dateRight.getDate());
-  return Math.floor((utcA - utcB) / (1000 * 60 * 60 * 24));
-};
+import { AlertCircle, Plus, X, Share2 } from 'lucide-react';
+import {
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  format,
+  getDay,
+} from '../utils/dateHelpers';
+import { isWorkDay as computeIsWorkDay, isOverQuota } from '../utils/shiftLogic';
 
 interface FillingPageProps {
-  settings: AppSettings;
-  savedLeaves: LeaveEntry[]; // From App state (persistent)
-  onSaveLeaves: (leaves: LeaveEntry[]) => void;
-  currentGroup: GroupType;
+  settings: MonthlySettings;
+  entries: MonthlyLeaveEntry[];
+  currentMonthKey: string;
+  onSaveEntry: (entry: MonthlyLeaveEntry) => void;
+  onDeleteEntry: (memberName: string, date: string) => void;
 }
 
-const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSaveLeaves, currentGroup }) => {
-  // Local state for editing, initialized from props
-  const [currentLeaves, setCurrentLeaves] = useState<LeaveEntry[]>(savedLeaves);
+const parseMonthKey = (key: string): { year: number; month0: number } => {
+  const [y, m] = key.split('-').map(Number);
+  return { year: y, month0: (m || 1) - 1 };
+};
+
+const FillingPage: React.FC<FillingPageProps> = ({
+  settings,
+  entries,
+  currentMonthKey,
+  onSaveEntry,
+  onDeleteEntry,
+}) => {
+  const { year, month0 } = parseMonthKey(currentMonthKey);
+  const group = settings.group;
+
   const [currentUser, setCurrentUser] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<LeaveType | ''>('');
-  
-  const [showSaveSuccess, setShowSaveSuccess] = useState(false);
 
-  // Group specific data
-  const groupMembers = currentGroup === 'A' ? settings.membersA : settings.membersB;
-  const groupFirstWorkDay = currentGroup === 'A' ? settings.firstWorkDayA : settings.firstWorkDayB;
-  const groupQuotas = currentGroup === 'A' ? settings.dailyQuotasA : settings.dailyQuotasB;
-  const groupExceptions = currentGroup === 'A' ? (settings.shiftExceptionsA || {}) : (settings.shiftExceptionsB || {});
-
-  // Validation Check: Are settings ready?
-  const isSettingsValid = groupFirstWorkDay && groupMembers.length > 0;
-  
-  // Style config based on group
-  const groupBgClass = currentGroup === 'A' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-teal-600 hover:bg-teal-700';
-
-  useEffect(() => {
-    setCurrentLeaves(savedLeaves);
-  }, [savedLeaves]);
+  const isSettingsValid = settings.firstWorkDay && settings.members.length > 0;
+  const groupBgClass = group === 'A' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-teal-600 hover:bg-teal-700';
 
   useEffect(() => {
     setCurrentUser('');
-  }, [currentGroup]);
-
-  const handleSave = () => {
-    onSaveLeaves(currentLeaves);
-    setShowSaveSuccess(true);
-    setTimeout(() => setShowSaveSuccess(false), 3000);
-  };
+  }, [group, currentMonthKey]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href);
     alert('連結已複製！');
   };
 
-  // Updated logic to respect exceptions
-  const isWorkDay = (dateStr: string) => {
-    // 1. Check Exceptions
-    if (groupExceptions[dateStr] !== undefined) {
-      return groupExceptions[dateStr];
-    }
+  const isWorkDay = (dateStr: string) =>
+    computeIsWorkDay(dateStr, settings.firstWorkDay, settings.shiftExceptions);
 
-    // 2. Fallback
-    if (!groupFirstWorkDay) return false;
-    const date = parseISO(dateStr);
-    const firstWork = parseISO(groupFirstWorkDay);
-    const diff = differenceInCalendarDays(date, firstWork);
-    return diff % 2 === 0;
-  };
-
-  const getQuota = (dateStr: string) => groupQuotas[dateStr] || 0;
+  const getQuota = (dateStr: string) => settings.dailyQuotas[dateStr] || 0;
 
   const handleAddLeave = () => {
     if (!selectedDate || !currentUser || !selectedType) return;
 
-    const newLeave: LeaveEntry = {
-      id: Math.random().toString(36).substr(2, 9),
+    const entry: MonthlyLeaveEntry = {
       date: selectedDate,
       memberName: currentUser,
       type: selectedType as LeaveType,
-      timestamp: Date.now(),
+      group,
+      monthKey: currentMonthKey,
     };
+    onSaveEntry(entry);
 
-    const filtered = currentLeaves.filter(l => !(l.date === selectedDate && l.memberName === currentUser));
-    
-    const updatedList = [...filtered, newLeave];
-    setCurrentLeaves(updatedList);
-    
     setSelectedType('');
-    setSelectedDate(null); 
+    setSelectedDate(null);
   };
 
-  const handleRemoveLeave = (id: string) => {
-    setCurrentLeaves(prev => prev.filter(l => l.id !== id));
+  const handleRemoveLeave = (memberName: string, date: string) => {
+    onDeleteEntry(memberName, date);
   };
 
-  const monthStart = startOfMonth(new Date(settings.year, settings.month));
+  const monthStart = startOfMonth(new Date(year, month0));
   const monthEnd = endOfMonth(monthStart);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
   const quotaForSelected = selectedDate ? getQuota(selectedDate) : 0;
   const isIntegerQuota = Number.isInteger(quotaForSelected);
-  
-  const availableLeaveTypes = !selectedDate 
-    ? [] 
-    : isIntegerQuota 
-      ? FULL_DAY_LEAVES 
-      : ALL_LEAVES;
+  const availableLeaveTypes = !selectedDate ? [] : isIntegerQuota ? FULL_DAY_LEAVES : ALL_LEAVES;
 
   if (!isSettingsValid) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] text-center px-4">
         <AlertCircle className="w-16 h-16 text-warning mb-4" />
-        <h2 className="text-2xl font-bold text-gray-800 mb-2">{currentGroup}班 設定尚未完成</h2>
+        <h2 className="text-2xl font-bold text-gray-800 mb-2">{group}班 設定尚未完成</h2>
         <p className="text-gray-600 max-w-md">
-          請先返回「配額設定」頁面，設定「{currentGroup}班當月首日上班日」並新增「團隊人員」，才能開始填寫假表。
+          請先返回「配額設定」頁面，設定「{group}班當月首日上班日」並新增「團隊人員」，才能開始填寫假表。
         </p>
       </div>
     );
@@ -154,47 +100,34 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center">
-            <span className={`mr-2 px-2 py-0.5 rounded text-white text-base ${currentGroup === 'A' ? 'bg-indigo-500' : 'bg-teal-500'}`}>{currentGroup}班</span>
-            {settings.year}年 {settings.month + 1}月 假表填寫
+            <span className={`mr-2 px-2 py-0.5 rounded text-white text-base ${group === 'A' ? 'bg-indigo-500' : 'bg-teal-500'}`}>{group}班</span>
+            {year}年 {month0 + 1}月 假表填寫
           </h1>
           <p className="text-base sm:text-sm text-gray-500 mt-1">
-            請選擇您的姓名，點擊上班日期進行填寫。
+            請選擇您的姓名，點擊上班日期進行填寫。變更會即時儲存。
           </p>
         </div>
-        
+
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-           <button 
+          <button
             onClick={handleCopyLink}
             className="flex-1 md:flex-none justify-center inline-flex items-center px-3 py-3 sm:py-2 border border-gray-300 rounded-md shadow-sm text-sm sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             <Share2 className="w-4 h-4 mr-2" />
             分享
           </button>
-          <button 
-            onClick={handleSave}
-            className={`flex-1 md:flex-none justify-center inline-flex items-center px-3 py-3 sm:py-2 border border-transparent rounded-md shadow-sm text-sm sm:text-sm font-medium text-white transition-colors ${groupBgClass}`}
-          >
-            <Save className="w-4 h-4 mr-2" />
-            儲存
-          </button>
         </div>
       </div>
 
-      {showSaveSuccess && (
-        <div className="fixed top-20 right-8 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded z-50 animate-bounce">
-          儲存成功！
-        </div>
-      )}
-
       <div className="bg-white p-3 sm:p-4 rounded-lg shadow mb-4 flex items-center space-x-2 sm:space-x-4 sticky top-16 z-40 border-b border-gray-100">
         <label className="text-base sm:text-sm font-bold text-gray-700 whitespace-nowrap">我是：</label>
-        <select 
-          value={currentUser} 
+        <select
+          value={currentUser}
           onChange={(e) => setCurrentUser(e.target.value)}
-          className={`block w-full max-w-xs rounded-md border-gray-300 border p-2 sm:p-2 text-base sm:text-sm shadow-sm focus:ring focus:ring-opacity-50 ${currentGroup === 'A' ? 'focus:border-indigo-500 focus:ring-indigo-500' : 'focus:border-teal-500 focus:ring-teal-500'}`}
+          className={`block w-full max-w-xs rounded-md border-gray-300 border p-2 sm:p-2 text-base sm:text-sm shadow-sm focus:ring focus:ring-opacity-50 ${group === 'A' ? 'focus:border-indigo-500 focus:ring-indigo-500' : 'focus:border-teal-500 focus:ring-teal-500'}`}
         >
           <option value="">-- 請選擇姓名 --</option>
-          {groupMembers.map(m => (
+          {settings.members.map((m) => (
             <option key={m} value={m}>{m}</option>
           ))}
         </select>
@@ -203,10 +136,9 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
 
       <div className="bg-white shadow rounded-lg overflow-hidden flex flex-col">
         <div className="overflow-x-auto">
-          <div className="min-w-[900px]"> 
-            
+          <div className="min-w-[900px]">
             <div className="grid grid-cols-7 gap-px bg-gray-200 border-b border-gray-200">
-              {WEEKDAYS.map(day => (
+              {WEEKDAYS.map((day) => (
                 <div key={day} className="bg-gray-50 py-2 sm:py-3 text-center text-sm sm:text-sm font-bold text-gray-700">
                   {day}
                 </div>
@@ -218,18 +150,18 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                 const dateStr = format(day, 'yyyy-MM-dd');
                 const workDay = isWorkDay(dateStr);
                 const quota = getQuota(dateStr);
-                
-                const dayLeaves = currentLeaves.filter(l => 
-                  l.date === dateStr && groupMembers.includes(l.memberName)
+
+                const dayLeaves = entries.filter(
+                  (l) => l.date === dateStr && settings.members.includes(l.memberName)
                 );
-                
+
                 const leavesCount = dayLeaves.length;
-                const isOverQuota = quota > 0 && leavesCount > quota; 
-                
+                const overQuota = isOverQuota(leavesCount, quota);
+
                 const colSpanStyle = dayIdx === 0 ? { gridColumnStart: getDay(day) + 1 } : {};
 
                 return (
-                  <div 
+                  <div
                     key={dateStr}
                     style={colSpanStyle}
                     className={`min-h-[50px] sm:min-h-[60px] md:min-h-[120px] bg-white relative flex flex-col ${!workDay ? 'bg-slate-50' : ''}`}
@@ -239,28 +171,28 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                         {format(day, 'd')}
                       </span>
                       {workDay && quota > 0 && (
-                        <div className={`flex items-center text-xs sm:text-xs px-1 py-0.5 sm:px-1.5 sm:py-0.5 rounded-full ${isOverQuota ? 'bg-red-100 text-red-700 font-bold' : 'bg-green-100 text-green-700'}`}>
+                        <div className={`flex items-center text-xs sm:text-xs px-1 py-0.5 sm:px-1.5 sm:py-0.5 rounded-full ${overQuota ? 'bg-red-100 text-red-700 font-bold' : 'bg-green-100 text-green-700'}`}>
                           {leavesCount}/{quota}
-                          {isOverQuota && <AlertCircle className="w-3 h-3 ml-0.5" />}
+                          {overQuota && <AlertCircle className="w-3 h-3 ml-0.5" />}
                         </div>
                       )}
                     </div>
 
                     {!workDay ? (
                       <div className="flex-1 flex items-center justify-center">
-                          <span className="text-4xl sm:text-2xl md:text-5xl font-black text-slate-200 select-none">O</span>
+                        <span className="text-4xl sm:text-2xl md:text-5xl font-black text-slate-200 select-none">O</span>
                       </div>
                     ) : (
                       <div className="flex-1 px-0.5 pb-0.5 sm:px-2 sm:pb-2 flex flex-col gap-1 sm:gap-1">
-                        {dayLeaves.map(leave => {
+                        {dayLeaves.map((leave) => {
                           const isCurrentUser = currentUser === leave.memberName;
                           return (
-                            <div 
-                              key={leave.id} 
+                            <div
+                              key={`${leave.memberName}_${leave.date}`}
                               className={`
                                 flex justify-between items-center px-1 py-0.5 sm:px-2 sm:py-1.5 rounded border group
-                                ${isCurrentUser 
-                                  ? 'bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-300 z-10' 
+                                ${isCurrentUser
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-300 z-10'
                                   : 'bg-blue-50 text-blue-700 border-blue-100'}
                               `}
                             >
@@ -268,8 +200,14 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                                 <span className="font-bold truncate text-xs sm:text-xs leading-tight">{leave.memberName}</span>
                                 <span className="font-bold whitespace-nowrap text-xs sm:text-xs leading-tight ml-1">{leave.type}</span>
                               </div>
-                              {(currentUser === leave.memberName) && (
-                                <button onClick={(e) => { e.stopPropagation(); handleRemoveLeave(leave.id); }} className="text-gray-400 hover:text-red-600 ml-1">
+                              {currentUser === leave.memberName && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRemoveLeave(leave.memberName, leave.date);
+                                  }}
+                                  className="text-gray-400 hover:text-red-600 ml-1"
+                                >
                                   <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                 </button>
                               )}
@@ -278,9 +216,12 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                         })}
 
                         {currentUser && quota > 0 && (
-                          <button 
-                            onClick={() => { setSelectedDate(dateStr); setSelectedType(''); }}
-                            className={`mt-auto w-full flex justify-center items-center py-1 sm:py-1 border-2 border-dashed border-gray-200 rounded text-gray-400 transition-colors text-xs sm:text-xs h-6 sm:h-auto ${currentGroup === 'A' ? 'hover:border-indigo-500 hover:text-indigo-500' : 'hover:border-teal-500 hover:text-teal-500'}`}
+                          <button
+                            onClick={() => {
+                              setSelectedDate(dateStr);
+                              setSelectedType('');
+                            }}
+                            className={`mt-auto w-full flex justify-center items-center py-1 sm:py-1 border-2 border-dashed border-gray-200 rounded text-gray-400 transition-colors text-xs sm:text-xs h-6 sm:h-auto ${group === 'A' ? 'hover:border-indigo-500 hover:text-indigo-500' : 'hover:border-teal-500 hover:text-teal-500'}`}
                           >
                             <Plus className="w-3 h-3 sm:w-3 sm:h-3" />
                           </button>
@@ -291,7 +232,6 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
                 );
               })}
             </div>
-
           </div>
         </div>
       </div>
@@ -299,53 +239,52 @@ const FillingPage: React.FC<FillingPageProps> = ({ settings, savedLeaves, onSave
       {selectedDate && (
         <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setSelectedDate(null)}></div>
-             <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-             
-             <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-               <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                 <div className="sm:flex sm:items-start">
-                   <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                     <h3 className="text-xl leading-6 font-medium text-gray-900 mb-4" id="modal-title">
-                       新增假單 - {selectedDate} ({currentGroup}班)
-                     </h3>
-                     <div className="mb-4 text-base text-gray-500">
-                       <p>填寫人：<span className="font-bold text-gray-900">{currentUser}</span></p>
-                       <p>當日配額：{getQuota(selectedDate)} ({isIntegerQuota ? '可選一般假別' : '可選一般假別 + 外宿'})</p>
-                     </div>
-                     
-                     <div className="grid grid-cols-4 gap-2">
-                        {availableLeaveTypes.map(type => (
-                          <button
-                            key={type}
-                            onClick={() => setSelectedType(type)}
-                            className={`p-3 text-base rounded border ${selectedType === type ? `${groupBgClass} text-white border-transparent` : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
-                          >
-                            {type}
-                          </button>
-                        ))}
-                     </div>
-                   </div>
-                 </div>
-               </div>
-               <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2 sm:gap-0">
-                 <button
-                   type="button"
-                   disabled={!selectedType}
-                   className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-3 text-base font-medium text-white focus:outline-none disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm transition-colors ${groupBgClass}`}
-                   onClick={handleAddLeave}
-                 >
-                   確定新增
-                 </button>
-                 <button
-                   type="button"
-                   className="mt-2 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-3 bg-white text-base font-medium text-gray-700 hover:text-gray-500 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                   onClick={() => setSelectedDate(null)}
-                 >
-                   取消
-                 </button>
-               </div>
-             </div>
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={() => setSelectedDate(null)}></div>
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div className="sm:flex sm:items-start">
+                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                    <h3 className="text-xl leading-6 font-medium text-gray-900 mb-4" id="modal-title">
+                      新增假單 - {selectedDate} ({group}班)
+                    </h3>
+                    <div className="mb-4 text-base text-gray-500">
+                      <p>填寫人：<span className="font-bold text-gray-900">{currentUser}</span></p>
+                      <p>當日配額：{getQuota(selectedDate)} ({isIntegerQuota ? '可選一般假別' : '可選一般假別 + 外宿'})</p>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2">
+                      {availableLeaveTypes.map((type) => (
+                        <button
+                          key={type}
+                          onClick={() => setSelectedType(type)}
+                          className={`p-3 text-base rounded border ${selectedType === type ? `${groupBgClass} text-white border-transparent` : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                        >
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2 sm:gap-0">
+                <button
+                  type="button"
+                  disabled={!selectedType}
+                  className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-3 text-base font-medium text-white focus:outline-none disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm transition-colors ${groupBgClass}`}
+                  onClick={handleAddLeave}
+                >
+                  確定新增
+                </button>
+                <button
+                  type="button"
+                  className="mt-2 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-3 bg-white text-base font-medium text-gray-700 hover:text-gray-500 focus:outline-none sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={() => setSelectedDate(null)}
+                >
+                  取消
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

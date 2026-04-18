@@ -17,39 +17,47 @@ export enum LeaveType {
 
 export type GroupType = 'A' | 'B';
 
-export interface AppSettings {
-  year: number;
-  month: number; // 0-11 for Jan-Dec
-  
-  // Group A Settings
-  firstWorkDayA: string; // ISO Date string YYYY-MM-DD
-  membersA: string[];
-  dailyQuotasA: Record<string, number>; 
-  shiftExceptionsA?: Record<string, boolean>; // New: Date -> true(Work)/false(Rest)
-
-  // Group B Settings
-  firstWorkDayB: string;
-  membersB: string[];
-  dailyQuotasB: Record<string, number>;
-  shiftExceptionsB?: Record<string, boolean>; // New
-  
-  // Legacy fields for migration support (optional)
-  firstWorkDay?: string;
-  members?: string[];
-  dailyQuotas?: Record<string, number>;
+/** Per-month, per-group settings document in Firestore. */
+export interface MonthlySettings {
+  monthKey: string;            // "YYYY-MM"
+  group: GroupType;
+  firstWorkDay: string;        // ISO "YYYY-MM-DD" (empty allowed for uninitialized)
+  members: string[];
+  dailyQuotas: Record<string, number>;
+  shiftExceptions: Record<string, boolean>;
+  schemaVersion: 2;
+  updatedAt?: number;
+  updatedBy?: string;
 }
 
-export interface LeaveEntry {
-  id: string;
-  date: string;
+/** A single leave record. Document id = `${memberName}_${date}`. */
+export interface MonthlyLeaveEntry {
+  date: string;                // "YYYY-MM-DD"
   memberName: string;
   type: LeaveType;
-  timestamp?: number;
+  group: GroupType;
+  monthKey: string;
+  updatedAt?: number;
+  updatedBy?: string;
 }
 
-export interface AppState {
-  settings: AppSettings;
-  leaves: LeaveEntry[];
+/** What App.tsx keeps in state for the currently viewed month+group. */
+export interface MonthData {
+  settings: MonthlySettings;
+  entries: MonthlyLeaveEntry[];
 }
 
-export type PageView = 'settings' | 'filling';
+export type PageView = 'settings' | 'filling' | 'history';
+
+export const createEmptyMonthlySettings = (
+  monthKey: string,
+  group: GroupType
+): MonthlySettings => ({
+  monthKey,
+  group,
+  firstWorkDay: '',
+  members: [],
+  dailyQuotas: {},
+  shiftExceptions: {},
+  schemaVersion: 2,
+});

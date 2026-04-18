@@ -1,8 +1,24 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
-import { getFirestore, doc, onSnapshot, setDoc, Firestore } from 'firebase/firestore';
+import {
+  getFirestore,
+  doc,
+  collection,
+  onSnapshot,
+  setDoc,
+  deleteDoc,
+  getDocs,
+  Firestore,
+  Unsubscribe,
+} from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut as firebaseSignOut, Auth, User } from 'firebase/auth';
 import { getAnalytics } from 'firebase/analytics';
-import { AppState } from './types';
+import { GroupType, MonthlySettings, MonthlyLeaveEntry } from './types';
+import {
+  ROOT_COLLECTION,
+  settingsDocId,
+  leavesMonthGroupId,
+  leaveEntryId,
+} from './utils/firestoreSchema';
 import { addLog } from './logger';
 
 // ------------------------------------------------------------------
@@ -51,34 +67,21 @@ export { auth };
 
 const googleProvider = new GoogleAuthProvider();
 
-// Keys for localStorage
 const REDIRECT_PENDING_KEY = 'auth_redirect_pending';
 const REDIRECT_TIMESTAMP_KEY = 'auth_redirect_timestamp';
-const MAX_REDIRECT_WAIT_TIME = 10 * 60 * 1000; // 10 minutes expiry
+const MAX_REDIRECT_WAIT_TIME = 10 * 60 * 1000;
 
-/**
- * Detect Mobile or In-App Browsers (LINE, FB, IG).
- * Used mainly for logging now, since we use a unified Popup-First strategy.
- */
 export const detectMobile = (): boolean => {
   const ua = navigator.userAgent || navigator.vendor || (window as any).opera || '';
   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Line|FBAN|FBAV|Instagram|MicroMessenger/i.test(ua);
 };
 
-/**
- * [Flag Write]
- * Set ONLY before triggering a redirect.
- */
 const setRedirectFlag = () => {
   addLog("[Auth] Setting redirect flag...", 'info');
   localStorage.setItem(REDIRECT_PENDING_KEY, 'true');
   localStorage.setItem(REDIRECT_TIMESTAMP_KEY, Date.now().toString());
 };
 
-/**
- * [Flag Clear]
- * Must be called after checking result or on error to prevent loops.
- */
 export const clearRedirectFlag = () => {
   if (localStorage.getItem(REDIRECT_PENDING_KEY)) {
     addLog("[Auth] Clearing redirect flag.", 'info');
@@ -87,22 +90,16 @@ export const clearRedirectFlag = () => {
   }
 };
 
-/**
- * [Flag Read]
- * Checks if a redirect is expected AND if the request is fresh (< 10 mins).
- */
 export const isRedirectPending = (): boolean => {
   const isPending = localStorage.getItem(REDIRECT_PENDING_KEY) === 'true';
   const timestampStr = localStorage.getItem(REDIRECT_TIMESTAMP_KEY);
-  
+
   if (!isPending) return false;
 
-  // Validate Timestamp
   if (timestampStr) {
     const timestamp = parseInt(timestampStr, 10);
     const now = Date.now();
-    
-    // Safety: If data is from the future or too old (>10 mins), discard it.
+
     if (isNaN(timestamp) || now - timestamp > MAX_REDIRECT_WAIT_TIME) {
       addLog("[Auth] Redirect flag expired or invalid. Clearing.", 'warn');
       clearRedirectFlag();
@@ -116,21 +113,12 @@ export const isRedirectPending = (): boolean => {
   return true;
 };
 
-/**
- * Core Login Function (Popup Only Strategy)
- * 
- * Logic:
- * 1. Always try signInWithPopup.
- * 2. If forced (e.g. debug), use Redirect.
- * 3. NO automatic fallback to Redirect to avoid loops/unwanted behavior.
- */
 export const loginWithGoogle = async (forceRedirect: boolean = false): Promise<User | void> => {
   if (!auth) throw new Error("Firebase Auth not initialized");
 
   const isMobile = detectMobile();
   addLog(`[Login] Start. Mobile: ${isMobile}. Strategy: Popup Only`);
 
-  // Allow forcing redirect (debug purposes or specific user request)
   if (forceRedirect) {
     addLog("[Login] Forcing Redirect...", 'info');
     setRedirectFlag();
@@ -139,38 +127,24 @@ export const loginWithGoogle = async (forceRedirect: boolean = false): Promise<U
   }
 
   try {
-    // --- ATTEMPT: POPUP ---
     const result = await signInWithPopup(auth, googleProvider);
     addLog(`[Login] Popup Success: ${result.user.email}`, 'success');
     return result.user;
-
   } catch (error: any) {
     console.warn("Popup failed:", error);
     addLog(`[Login] Popup failed: ${error.code || error.message}`, 'error');
-    
-    // Explicitly throw error. No auto-fallback.
     throw error;
   }
 };
 
-/**
- * Check for Redirect Result
- * Should be called once on App mount.
- */
 export const checkRedirectResult = async (): Promise<User | null> => {
   if (!auth) return null;
-
-  // Gatekeeper: Only check if we are actually waiting for it.
-  if (!isRedirectPending()) {
-    return null;
-  }
+  if (!isRedirectPending()) return null;
 
   addLog("[Auth] Detected pending redirect. Checking result...", 'info');
 
   try {
     const result = await getRedirectResult(auth);
-    
-    // CRITICAL: Clear flag immediately after getting result.
     clearRedirectFlag();
 
     if (result) {
@@ -181,7 +155,7 @@ export const checkRedirectResult = async (): Promise<User | null> => {
       return null;
     }
   } catch (error: any) {
-    clearRedirectFlag(); // Ensure cleanup on error
+    clearRedirectFlag();
     console.error("Check Redirect Error:", error);
     addLog(`[Auth] Check Redirect Error: ${error.message}`, 'error');
     return null;
@@ -201,28 +175,131 @@ export const logout = async () => {
 };
 
 // ------------------------------------------------------------------
-// DATA SYNC
+// DATA SYNC — PER-MONTH PARTITIONED (schemaVersion 2)
 // ------------------------------------------------------------------
-const COLLECTION_NAME = 'shift_scheduler';
-const DOC_NAME = 'v1_data';
 
-export const subscribeToData = (
-  onData: (data: AppState | null) => void,
+/**
+ * Subscribe to a month+group's settings document.
+ * Returns an unsubscribe function. Never throws synchronously.
+ */
+export const subscribeMonthSettings = (
+  monthKey: string,
+  group: GroupType,
+  onData: (settings: MonthlySettings | null) => void,
   onError: (error: Error) => void
-) => {
+): Unsubscribe => {
   if (!isConfigured || !db) return () => {};
-  const docRef = doc(db, COLLECTION_NAME, DOC_NAME);
-  return onSnapshot(docRef, 
-    (docSnap) => onData(docSnap.exists() ? docSnap.data() as AppState : null),
-    (error) => {
-      console.error("Sync error:", error);
-      onError(error);
+  const ref = doc(db, ROOT_COLLECTION, settingsDocId(monthKey, group));
+  return onSnapshot(
+    ref,
+    (snap) => onData(snap.exists() ? (snap.data() as MonthlySettings) : null),
+    (err) => {
+      console.error('subscribeMonthSettings error:', err);
+      onError(err);
     }
   );
 };
 
-export const saveDataToFirebase = async (data: AppState) => {
+/**
+ * Subscribe to leave entries of a month+group.
+ * Path: shift_scheduler/{docId}/leaves/{monthGroup}/entries/{entryId}
+ */
+export const subscribeMonthEntries = (
+  monthKey: string,
+  group: GroupType,
+  onData: (entries: MonthlyLeaveEntry[]) => void,
+  onError: (error: Error) => void
+): Unsubscribe => {
+  if (!isConfigured || !db) return () => {};
+  const entriesRef = collection(
+    db,
+    ROOT_COLLECTION,
+    leavesMonthGroupId(monthKey, group),
+    'entries'
+  );
+  return onSnapshot(
+    entriesRef,
+    (snap) => {
+      const list: MonthlyLeaveEntry[] = [];
+      snap.forEach((d) => list.push(d.data() as MonthlyLeaveEntry));
+      onData(list);
+    },
+    (err) => {
+      console.error('subscribeMonthEntries error:', err);
+      onError(err);
+    }
+  );
+};
+
+/** Write (or create) a month+group settings document. */
+export const saveMonthSettings = async (
+  settings: MonthlySettings,
+  userEmail: string | null
+): Promise<void> => {
   if (!isConfigured || !db) return;
-  const docRef = doc(db, COLLECTION_NAME, DOC_NAME);
-  await setDoc(docRef, data);
+  const ref = doc(db, ROOT_COLLECTION, settingsDocId(settings.monthKey, settings.group));
+  const payload: MonthlySettings = {
+    ...settings,
+    schemaVersion: 2,
+    updatedAt: Date.now(),
+    updatedBy: userEmail ?? 'unknown',
+  };
+  await setDoc(ref, payload);
+};
+
+/** Add or overwrite a single leave entry. */
+export const saveLeaveEntry = async (
+  entry: MonthlyLeaveEntry,
+  userEmail: string | null
+): Promise<void> => {
+  if (!isConfigured || !db) return;
+  const ref = doc(
+    db,
+    ROOT_COLLECTION,
+    leavesMonthGroupId(entry.monthKey, entry.group),
+    'entries',
+    leaveEntryId(entry.memberName, entry.date)
+  );
+  const payload: MonthlyLeaveEntry = {
+    ...entry,
+    updatedAt: Date.now(),
+    updatedBy: userEmail ?? 'unknown',
+  };
+  await setDoc(ref, payload);
+};
+
+/** Delete a single leave entry by member+date. */
+export const deleteLeaveEntry = async (
+  monthKey: string,
+  group: GroupType,
+  memberName: string,
+  date: string
+): Promise<void> => {
+  if (!isConfigured || !db) return;
+  const ref = doc(
+    db,
+    ROOT_COLLECTION,
+    leavesMonthGroupId(monthKey, group),
+    'entries',
+    leaveEntryId(memberName, date)
+  );
+  await deleteDoc(ref);
+};
+
+/** One-shot fetch of month entries (used for local mode init / diagnostics). */
+export const fetchMonthEntriesOnce = async (
+  monthKey: string,
+  group: GroupType
+): Promise<MonthlyLeaveEntry[]> => {
+  if (!isConfigured || !db) return [];
+  const entriesRef = collection(
+    db,
+    ROOT_COLLECTION,
+    leavesMonthGroupId(monthKey, group),
+    'entries'
+  );
+  const snap = await getDocs(entriesRef);
+  const list: MonthlyLeaveEntry[] = [];
+  snap.forEach((d) => list.push(d.data() as MonthlyLeaveEntry));
+  return list;
 };

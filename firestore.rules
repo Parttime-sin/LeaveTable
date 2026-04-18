@@ -1,0 +1,39 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasEmail() {
+      return isSignedIn() && request.auth.token.email != null;
+    }
+
+    function updatedByMatchesCaller() {
+      return request.resource.data.updatedBy == request.auth.token.email;
+    }
+
+    match /shift_scheduler/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+
+      match /leaves/{monthGroup}/entries/{entryId} {
+        allow read: if isSignedIn();
+        allow write: if hasEmail() && updatedByMatchesCaller();
+      }
+
+      match /audit_logs/{logId} {
+        allow read: if isSignedIn();
+        allow create: if hasEmail()
+                      && request.resource.data.userEmail == request.auth.token.email;
+        allow update, delete: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

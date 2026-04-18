@@ -23,5 +23,3 @@ export const HALF_DAY_LEAVES = [
 export const ALL_LEAVES = [...FULL_DAY_LEAVES, ...HALF_DAY_LEAVES];
 
 export const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
-
-export const STORAGE_KEY = 'shift_scheduler_v1';

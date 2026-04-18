@@ -1,62 +1,49 @@
 import React, { useState } from 'react';
 import { X, Calendar as CalendarIcon, ZoomIn, ZoomOut } from 'lucide-react';
-import { AppSettings, LeaveEntry, GroupType } from '../types';
+import { MonthlySettings, MonthlyLeaveEntry, GroupType } from '../types';
 import { WEEKDAYS } from '../constants';
+import {
+  startOfMonth,
+  endOfMonth,
+  eachDayOfInterval,
+  format,
+  getDay,
+} from '../utils/dateHelpers';
+import { isWorkDay as computeIsWorkDay } from '../utils/shiftLogic';
 
-// Local date helpers to replace date-fns and avoid version/import issues
-const startOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1);
-const endOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0);
-const eachDayOfInterval = ({ start, end }: { start: Date, end: Date }) => {
-  const days: Date[] = [];
-  const curr = new Date(start);
-  while (curr <= end) {
-    days.push(new Date(curr));
-    curr.setDate(curr.getDate() + 1);
-  }
-  return days;
-};
-const format = (date: Date, fmt: string) => {
-  if (fmt === 'yyyy-MM-dd') {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-  }
-  if (fmt === 'd') return String(date.getDate());
-  if (fmt === 'EEE') return WEEKDAYS[date.getDay()];
-  return '';
-};
-const getDay = (date: Date) => date.getDay();
-const parseISO = (str: string) => {
-  const [y, m, d] = str.split('-').map(Number);
-  return new Date(y, m - 1, d);
-};
-const differenceInCalendarDays = (dateLeft: Date, dateRight: Date) => {
-  const utcA = Date.UTC(dateLeft.getFullYear(), dateLeft.getMonth(), dateLeft.getDate());
-  const utcB = Date.UTC(dateRight.getFullYear(), dateRight.getMonth(), dateRight.getDate());
-  return Math.floor((utcA - utcB) / (1000 * 60 * 60 * 24));
+const parseMonthKey = (key: string): { year: number; month0: number } => {
+  const [y, m] = key.split('-').map(Number);
+  return { year: y, month0: (m || 1) - 1 };
 };
 
 interface PreviewModalProps {
   isOpen: boolean;
   onClose: () => void;
-  settings: AppSettings;
-  leaves: LeaveEntry[];
+  settings: MonthlySettings;
+  entries: MonthlyLeaveEntry[];
+  currentMonthKey: string;
   currentUser?: string;
   currentGroup: GroupType;
 }
 
-const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, settings, leaves, currentUser, currentGroup }) => {
+const PreviewModal: React.FC<PreviewModalProps> = ({
+  isOpen,
+  onClose,
+  settings,
+  entries,
+  currentMonthKey,
+  currentUser,
+  currentGroup,
+}) => {
   const [isZoomed, setIsZoomed] = useState(false);
 
   if (!isOpen) return null;
 
-  const monthStart = startOfMonth(new Date(settings.year, settings.month));
+  const { year, month0 } = parseMonthKey(currentMonthKey);
+  const monthStart = startOfMonth(new Date(year, month0));
   const monthEnd = endOfMonth(monthStart);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-  const groupMembers = currentGroup === 'A' ? settings.membersA : settings.membersB;
-  const groupFirstWorkDay = currentGroup === 'A' ? settings.firstWorkDayA : settings.firstWorkDayB;
   const groupColorClass = currentGroup === 'A' ? 'text-indigo-600' : 'text-teal-600';
   const groupBgClass = currentGroup === 'A' ? 'bg-indigo-100' : 'bg-teal-100';
 
@@ -73,17 +60,10 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, settings, 
   // Pre-calculate data for each day
   const getDayData = (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
-    
-    // Check work day logic
-    let isWorkDay = true;
-    if (groupFirstWorkDay) {
-      const firstWork = parseISO(groupFirstWorkDay);
-      const diff = differenceInCalendarDays(date, firstWork);
-      isWorkDay = diff % 2 === 0;
-    }
-
-    const dayLeaves = leaves.filter(l => l.date === dateStr && groupMembers.includes(l.memberName));
-    
+    const isWorkDay = computeIsWorkDay(dateStr, settings.firstWorkDay, settings.shiftExceptions);
+    const dayLeaves = entries.filter(
+      (l) => l.date === dateStr && settings.members.includes(l.memberName)
+    );
     return { isWorkDay, dayLeaves, dateStr };
   };
 
@@ -108,7 +88,7 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, settings, 
                     假表預覽 ({currentGroup}班)
                   </h3>
                   <p className="text-sm text-gray-500">
-                    {settings.year}年 {settings.month + 1}月 {currentUser && `(目前檢視: ${currentUser})`}
+                    {year}年 {month0 + 1}月 {currentUser && `(目前檢視: ${currentUser})`}
                   </p>
                 </div>
               </div>
@@ -177,8 +157,8 @@ const PreviewModal: React.FC<PreviewModalProps> = ({ isOpen, onClose, settings, 
                           {dayLeaves.map((leave) => {
                             const isCurrentUser = leave.memberName === currentUser;
                             return (
-                              <div 
-                                key={leave.id} 
+                              <div
+                                key={`${leave.memberName}_${leave.date}`}
                                 className={`
                                   flex items-center justify-between rounded border 
                                   ${leaveWrapperPadding}

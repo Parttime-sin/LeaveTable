@@ -1,0 +1,7 @@
+{"t":0,"agent":"system","event":"keyword_detected","keyword":"code-review"}
+{"t":0,"agent":"a11171e","agent_type":"Explore","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a51e262","agent_type":"Explore","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a192a34","agent_type":"Explore","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a11171e","agent_type":"Explore","event":"agent_stop","success":true,"duration_ms":109369}
+{"t":0,"agent":"a51e262","agent_type":"Explore","event":"agent_stop","success":true,"duration_ms":100025}
+{"t":0,"agent":"a192a34","agent_type":"Explore","event":"agent_stop","success":true,"duration_ms":10847726}
