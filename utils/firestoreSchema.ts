@@ -20,6 +20,14 @@ export const settingsDocId = (key: string, group: GroupType): string =>
 export const leavesMonthGroupId = (key: string, group: GroupType): string =>
   `${key}_${group}`;
 
-/** Deterministic id for a single leave entry (one per member+date). */
-export const leaveEntryId = (memberName: string, date: string): string =>
-  `${memberName}_${date}`;
+/** Deterministic id for a single leave entry (one per member+date/order). */
+export const leaveEntryId = (memberName: string, date: string, order: number): string =>
+  `${memberName}_${date}_${order}`;
+
+/** Returns the monthKey of the previous calendar month. */
+export const previousMonthKey = (key: string): string => {
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(y, (m || 1) - 1, 1);
+  d.setMonth(d.getMonth() - 1);
+  return monthKey(d.getFullYear(), d.getMonth());
+};

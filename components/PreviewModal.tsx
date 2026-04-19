@@ -173,7 +173,7 @@ const PreviewModal: React.FC<PreviewModalProps> = ({
                                   ${leaveTypeSize}
                                   ${isCurrentUser ? 'bg-amber-200' : 'bg-white'}
                                 `}>
-                                  {leave.type}
+                                  {leave.category}{leave.order}
                                 </span>
                               </div>
                             );

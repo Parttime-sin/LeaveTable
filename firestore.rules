@@ -19,15 +19,18 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isSignedIn();
 
-      match /leaves/{monthGroup}/entries/{entryId} {
+      match /entries/{entryId} {
         allow read: if isSignedIn();
         allow write: if hasEmail() && updatedByMatchesCaller();
+        allow delete: if isSignedIn();
       }
 
       match /audit_logs/{logId} {
         allow read: if isSignedIn();
         allow create: if hasEmail()
-                      && request.resource.data.userEmail == request.auth.token.email;
+                      && request.resource.data.userEmail == request.auth.token.email
+                      && request.resource.data.expireAt is timestamp
+                      && request.resource.data.timestamp is number;
         allow update, delete: if false;
       }
     }

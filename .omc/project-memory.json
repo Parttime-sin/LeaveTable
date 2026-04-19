@@ -137,33 +137,69 @@
   "hotPaths": [
     {
       "path": "App.tsx",
-      "accessCount": 13,
-      "lastAccessed": 1776525229919,
+      "accessCount": 27,
+      "lastAccessed": 1776596236652,
       "type": "file"
     },
     {
-      "path": "components\\PreviewModal.tsx",
-      "accessCount": 11,
-      "lastAccessed": 1776525333311,
-      "type": "file"
-    },
-    {
-      "path": "pages\\SettingsPage.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1776525147633,
+      "path": "firebase.ts",
+      "accessCount": 17,
+      "lastAccessed": 1776596106939,
       "type": "file"
     },
     {
       "path": "pages\\FillingPage.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1776525214816,
+      "accessCount": 14,
+      "lastAccessed": 1776598044461,
+      "type": "file"
+    },
+    {
+      "path": "components\\PreviewModal.tsx",
+      "accessCount": 13,
+      "lastAccessed": 1776596256980,
+      "type": "file"
+    },
+    {
+      "path": "pages\\SettingsPage.tsx",
+      "accessCount": 11,
+      "lastAccessed": 1776528402557,
+      "type": "file"
+    },
+    {
+      "path": "types.ts",
+      "accessCount": 10,
+      "lastAccessed": 1776596031204,
+      "type": "file"
+    },
+    {
+      "path": "utils\\auditLog.ts",
+      "accessCount": 10,
+      "lastAccessed": 1776596217511,
       "type": "file"
     },
     {
       "path": "",
-      "accessCount": 6,
-      "lastAccessed": 1776525250815,
+      "accessCount": 8,
+      "lastAccessed": 1776596242361,
       "type": "directory"
+    },
+    {
+      "path": "constants.ts",
+      "accessCount": 7,
+      "lastAccessed": 1776596045556,
+      "type": "file"
+    },
+    {
+      "path": "components\\Navbar.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1776528824369,
+      "type": "file"
+    },
+    {
+      "path": "firestore.rules",
+      "accessCount": 6,
+      "lastAccessed": 1776567299939,
+      "type": "file"
     },
     {
       "path": "package.json",
@@ -172,21 +208,9 @@
       "type": "file"
     },
     {
-      "path": "types.ts",
+      "path": "utils\\firestoreSchema.test.ts",
       "accessCount": 5,
-      "lastAccessed": 1776523835782,
-      "type": "file"
-    },
-    {
-      "path": "firebase.ts",
-      "accessCount": 5,
-      "lastAccessed": 1776523884012,
-      "type": "file"
-    },
-    {
-      "path": "constants.ts",
-      "accessCount": 5,
-      "lastAccessed": 1776525294516,
+      "lastAccessed": 1776596344679,
       "type": "file"
     },
     {
@@ -214,6 +238,12 @@
       "type": "file"
     },
     {
+      "path": "utils\\firestoreSchema.ts",
+      "accessCount": 4,
+      "lastAccessed": 1776596061712,
+      "type": "file"
+    },
+    {
       "path": "logger.ts",
       "accessCount": 3,
       "lastAccessed": 1776510067188,
@@ -223,12 +253,6 @@
       "path": "README.md",
       "accessCount": 3,
       "lastAccessed": 1776510075514,
-      "type": "file"
-    },
-    {
-      "path": "components\\Navbar.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1776523905192,
       "type": "file"
     },
     {
@@ -262,12 +286,6 @@
       "type": "file"
     },
     {
-      "path": "firestore.rules",
-      "accessCount": 1,
-      "lastAccessed": 1776521968248,
-      "type": "file"
-    },
-    {
       "path": "components\\ErrorBoundary.tsx",
       "accessCount": 1,
       "lastAccessed": 1776521994485,
@@ -286,27 +304,21 @@
       "type": "file"
     },
     {
-      "path": "utils\\firestoreSchema.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776522446200,
-      "type": "file"
-    },
-    {
       "path": "utils\\shiftLogic.test.ts",
       "accessCount": 1,
       "lastAccessed": 1776522457778,
       "type": "file"
     },
     {
-      "path": "utils\\firestoreSchema.test.ts",
-      "accessCount": 1,
-      "lastAccessed": 1776522466821,
-      "type": "file"
-    },
-    {
       "path": "utils\\dateHelpers.test.ts",
       "accessCount": 1,
       "lastAccessed": 1776522478239,
+      "type": "file"
+    },
+    {
+      "path": "pages\\HistoryPage.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1776528782277,
       "type": "file"
     }
   ],

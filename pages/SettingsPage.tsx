@@ -13,6 +13,7 @@ import {
   Lock,
   Edit,
   CalendarRange,
+  Download,
 } from 'lucide-react';
 import { MonthlySettings } from '../types';
 import {
@@ -25,7 +26,8 @@ import {
   addDays,
 } from '../utils/dateHelpers';
 import { isWorkDay as computeIsWorkDay } from '../utils/shiftLogic';
-import { monthKey as toMonthKey } from '../utils/firestoreSchema';
+import { monthKey as toMonthKey, previousMonthKey } from '../utils/firestoreSchema';
+import { fetchMonthSettingsOnce } from '../firebase';
 
 interface SettingsPageProps {
   settings: MonthlySettings;
@@ -86,6 +88,24 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
     if (!name || local.members.includes(name)) return;
     push({ ...local, members: [...local.members, name] });
     setNewMemberName('');
+  };
+
+  const handleImportFromPreviousMonth = async () => {
+    if (!isEditing) return;
+    const prevKey = previousMonthKey(currentMonthKey);
+    try {
+      const prev = await fetchMonthSettingsOnce(prevKey, group);
+      if (!prev || prev.members.length === 0) {
+        alert(`上個月 (${prevKey}) 沒有 ${group} 班人員資料`);
+        return;
+      }
+      if (!window.confirm(`確定要從上月 (${prevKey}) 匯入 ${prev.members.length} 位 ${group} 班人員嗎？`)) {
+        return;
+      }
+      push({ ...local, members: [...prev.members] });
+    } catch (e: any) {
+      alert(`匯入失敗：${e.message ?? '未知錯誤'}`);
+    }
   };
 
   const handleRemoveMember = (name: string) => {
@@ -333,6 +353,16 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 {group}班人員 ({local.members.length})
               </h2>
             </div>
+
+            {isEditing && local.members.length === 0 && (
+              <button
+                onClick={handleImportFromPreviousMonth}
+                className="w-full mb-3 inline-flex justify-center items-center px-3 py-2 border border-dashed border-slate-300 rounded-md text-sm font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 transition-colors"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                從上月匯入 {group} 班人員
+              </button>
+            )}
 
             <div className={`flex space-x-2 mb-4 ${opacityClass}`}>
               <input

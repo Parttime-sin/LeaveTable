@@ -6,7 +6,9 @@ import {
   onSnapshot,
   setDoc,
   deleteDoc,
+  getDoc,
   getDocs,
+  writeBatch,
   Firestore,
   Unsubscribe,
 } from 'firebase/firestore';
@@ -59,7 +61,7 @@ if (firebaseConfig.apiKey && firebaseConfig.projectId) {
 }
 
 export const isFirebaseEnabled = () => isConfigured;
-export { auth };
+export { auth, db };
 
 // ------------------------------------------------------------------
 // AUTH HELPERS & FLAG MANAGEMENT
@@ -247,7 +249,7 @@ export const saveMonthSettings = async (
   await setDoc(ref, payload);
 };
 
-/** Add or overwrite a single leave entry. */
+/** Add or overwrite a single leave entry (doc id includes order). */
 export const saveLeaveEntry = async (
   entry: MonthlyLeaveEntry,
   userEmail: string | null
@@ -258,7 +260,7 @@ export const saveLeaveEntry = async (
     ROOT_COLLECTION,
     leavesMonthGroupId(entry.monthKey, entry.group),
     'entries',
-    leaveEntryId(entry.memberName, entry.date)
+    leaveEntryId(entry.memberName, entry.date, entry.order)
   );
   const payload: MonthlyLeaveEntry = {
     ...entry,
@@ -268,22 +270,51 @@ export const saveLeaveEntry = async (
   await setDoc(ref, payload);
 };
 
-/** Delete a single leave entry by member+date. */
+/** Delete a single leave entry and reorder remaining entries for that member in the month. */
 export const deleteLeaveEntry = async (
   monthKey: string,
   group: GroupType,
   memberName: string,
-  date: string
+  date: string,
+  order: number,
+  allMemberEntries: MonthlyLeaveEntry[],
+  userEmail: string | null
 ): Promise<void> => {
   if (!isConfigured || !db) return;
-  const ref = doc(
-    db,
-    ROOT_COLLECTION,
-    leavesMonthGroupId(monthKey, group),
-    'entries',
-    leaveEntryId(memberName, date)
-  );
-  await deleteDoc(ref);
+
+  const containerDocId = leavesMonthGroupId(monthKey, group);
+
+  // Delete the target entry
+  const targetRef = doc(db, ROOT_COLLECTION, containerDocId, 'entries', leaveEntryId(memberName, date, order));
+  await deleteDoc(targetRef);
+
+  // Reorder remaining entries for this member (those with order > deleted order)
+  const toReorder = allMemberEntries
+    .filter((e) => e.order > order)
+    .sort((a, b) => a.order - b.order);
+
+  if (toReorder.length === 0) return;
+
+  const batch = writeBatch(db);
+  const now = Date.now();
+  for (const e of toReorder) {
+    const oldRef = doc(db, ROOT_COLLECTION, containerDocId, 'entries', leaveEntryId(e.memberName, e.date, e.order));
+    const newRef = doc(db, ROOT_COLLECTION, containerDocId, 'entries', leaveEntryId(e.memberName, e.date, e.order - 1));
+    batch.delete(oldRef);
+    batch.set(newRef, { ...e, order: e.order - 1, updatedAt: now, updatedBy: userEmail ?? 'unknown' });
+  }
+  await batch.commit();
+};
+
+/** One-shot fetch of a month+group settings document. Returns null if absent. */
+export const fetchMonthSettingsOnce = async (
+  monthKey: string,
+  group: GroupType
+): Promise<MonthlySettings | null> => {
+  if (!isConfigured || !db) return null;
+  const ref = doc(db, ROOT_COLLECTION, settingsDocId(monthKey, group));
+  const snap = await getDoc(ref);
+  return snap.exists() ? (snap.data() as MonthlySettings) : null;
 };
 
 /** One-shot fetch of month entries (used for local mode init / diagnostics). */

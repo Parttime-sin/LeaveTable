@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { MonthlySettings, MonthlyLeaveEntry, LeaveType } from '../types';
-import { WEEKDAYS, FULL_DAY_LEAVES, ALL_LEAVES } from '../constants';
+import { MonthlySettings, MonthlyLeaveEntry, LeaveCategory, ALL_CATEGORIES, FULL_DAY_CATEGORIES, CATEGORY_WEIGHT } from '../types';
+import { WEEKDAYS } from '../constants';
 import { AlertCircle, Plus, X, Share2 } from 'lucide-react';
 import {
   startOfMonth,
@@ -9,14 +9,14 @@ import {
   format,
   getDay,
 } from '../utils/dateHelpers';
-import { isWorkDay as computeIsWorkDay, isOverQuota } from '../utils/shiftLogic';
+import { isWorkDay as computeIsWorkDay } from '../utils/shiftLogic';
 
 interface FillingPageProps {
   settings: MonthlySettings;
   entries: MonthlyLeaveEntry[];
   currentMonthKey: string;
   onSaveEntry: (entry: MonthlyLeaveEntry) => void;
-  onDeleteEntry: (memberName: string, date: string) => void;
+  onDeleteEntry: (memberName: string, date: string, order: number) => void;
 }
 
 const parseMonthKey = (key: string): { year: number; month0: number } => {
@@ -36,7 +36,7 @@ const FillingPage: React.FC<FillingPageProps> = ({
 
   const [currentUser, setCurrentUser] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedType, setSelectedType] = useState<LeaveType | ''>('');
+  const [selectedCategory, setSelectedCategory] = useState<LeaveCategory | ''>('');
 
   const isSettingsValid = settings.firstWorkDay && settings.members.length > 0;
   const groupBgClass = group === 'A' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-teal-600 hover:bg-teal-700';
@@ -53,35 +53,68 @@ const FillingPage: React.FC<FillingPageProps> = ({
   const isWorkDay = (dateStr: string) =>
     computeIsWorkDay(dateStr, settings.firstWorkDay, settings.shiftExceptions);
 
-  const getQuota = (dateStr: string) => settings.dailyQuotas[dateStr] || 0;
+  const getQuota = (dateStr: string) => settings.dailyQuotas[dateStr] ?? 0;
+
+  /** Next order number for a member in this month (across all dates). */
+  const nextOrderForMember = (memberName: string): number => {
+    const memberEntries = entries.filter((e) => e.memberName === memberName);
+    if (memberEntries.length === 0) return 1;
+    return Math.max(...memberEntries.map((e) => e.order)) + 1;
+  };
+
+  /** Total leave weight used on a given date. */
+  const usedWeight = (dateStr: string): number =>
+    entries
+      .filter((e) => e.date === dateStr && settings.members.includes(e.memberName))
+      .reduce((sum, e) => sum + CATEGORY_WEIGHT[e.category], 0);
 
   const handleAddLeave = () => {
-    if (!selectedDate || !currentUser || !selectedType) return;
+    if (!selectedDate || !currentUser || !selectedCategory) return;
 
+    const quota = getQuota(selectedDate);
+    const used = usedWeight(selectedDate);
+    const weight = CATEGORY_WEIGHT[selectedCategory as LeaveCategory];
+
+    if (used + weight > quota) {
+      alert(`已超過當日配額（${used}/${quota}），無法新增。`);
+      return;
+    }
+
+    // Check if member already has an entry on this date with same category (prevent duplicate)
+    const alreadyExists = entries.some(
+      (e) => e.memberName === currentUser && e.date === selectedDate && e.category === selectedCategory
+    );
+    if (alreadyExists) {
+      alert(`你在 ${selectedDate} 已有相同假別。`);
+      return;
+    }
+
+    const order = nextOrderForMember(currentUser);
     const entry: MonthlyLeaveEntry = {
       date: selectedDate,
       memberName: currentUser,
-      type: selectedType as LeaveType,
+      category: selectedCategory as LeaveCategory,
+      order,
       group,
       monthKey: currentMonthKey,
     };
     onSaveEntry(entry);
-
-    setSelectedType('');
+    setSelectedCategory('');
     setSelectedDate(null);
-  };
-
-  const handleRemoveLeave = (memberName: string, date: string) => {
-    onDeleteEntry(memberName, date);
   };
 
   const monthStart = startOfMonth(new Date(year, month0));
   const monthEnd = endOfMonth(monthStart);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
-  const quotaForSelected = selectedDate ? getQuota(selectedDate) : 0;
-  const isIntegerQuota = Number.isInteger(quotaForSelected);
-  const availableLeaveTypes = !selectedDate ? [] : isIntegerQuota ? FULL_DAY_LEAVES : ALL_LEAVES;
+  const quota4Selected = selectedDate ? getQuota(selectedDate) : 0;
+  const used4Selected = selectedDate ? usedWeight(selectedDate) : 0;
+  const remaining4Selected = quota4Selected - used4Selected;
+
+  // Available categories: only show those that fit in remaining quota
+  const availableCategories = ALL_CATEGORIES.filter(
+    (c) => CATEGORY_WEIGHT[c] <= remaining4Selected
+  );
 
   if (!isSettingsValid) {
     return (
@@ -104,14 +137,13 @@ const FillingPage: React.FC<FillingPageProps> = ({
             {year}年 {month0 + 1}月 假表填寫
           </h1>
           <p className="text-base sm:text-sm text-gray-500 mt-1">
-            請選擇您的姓名，點擊上班日期進行填寫。變更會即時儲存。
+            請選擇您的姓名，點擊上班日期進行填寫。選好假別後按「確定新增」儲存。
           </p>
         </div>
-
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
           <button
             onClick={handleCopyLink}
-            className="flex-1 md:flex-none justify-center inline-flex items-center px-3 py-3 sm:py-2 border border-gray-300 rounded-md shadow-sm text-sm sm:text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            className="flex-1 md:flex-none justify-center inline-flex items-center px-3 py-3 sm:py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
           >
             <Share2 className="w-4 h-4 mr-2" />
             分享
@@ -124,14 +156,14 @@ const FillingPage: React.FC<FillingPageProps> = ({
         <select
           value={currentUser}
           onChange={(e) => setCurrentUser(e.target.value)}
-          className={`block w-full max-w-xs rounded-md border-gray-300 border p-2 sm:p-2 text-base sm:text-sm shadow-sm focus:ring focus:ring-opacity-50 ${group === 'A' ? 'focus:border-indigo-500 focus:ring-indigo-500' : 'focus:border-teal-500 focus:ring-teal-500'}`}
+          className={`block w-full max-w-xs rounded-md border-gray-300 border p-2 text-base sm:text-sm shadow-sm focus:ring focus:ring-opacity-50 ${group === 'A' ? 'focus:border-indigo-500 focus:ring-indigo-500' : 'focus:border-teal-500 focus:ring-teal-500'}`}
         >
           <option value="">-- 請選擇姓名 --</option>
           {settings.members.map((m) => (
             <option key={m} value={m}>{m}</option>
           ))}
         </select>
-        {!currentUser && <span className="text-sm sm:text-sm text-red-500 animate-pulse font-medium">請先選擇姓名</span>}
+        {!currentUser && <span className="text-sm text-red-500 animate-pulse font-medium">請先選擇姓名</span>}
       </div>
 
       <div className="bg-white shadow rounded-lg overflow-hidden flex flex-col">
@@ -139,7 +171,7 @@ const FillingPage: React.FC<FillingPageProps> = ({
           <div className="min-w-[900px]">
             <div className="grid grid-cols-7 gap-px bg-gray-200 border-b border-gray-200">
               {WEEKDAYS.map((day) => (
-                <div key={day} className="bg-gray-50 py-2 sm:py-3 text-center text-sm sm:text-sm font-bold text-gray-700">
+                <div key={day} className="bg-gray-50 py-2 sm:py-3 text-center text-sm font-bold text-gray-700">
                   {day}
                 </div>
               ))}
@@ -150,13 +182,12 @@ const FillingPage: React.FC<FillingPageProps> = ({
                 const dateStr = format(day, 'yyyy-MM-dd');
                 const workDay = isWorkDay(dateStr);
                 const quota = getQuota(dateStr);
+                const used = usedWeight(dateStr);
+                const overQuota = quota > 0 && used > quota;
 
-                const dayLeaves = entries.filter(
-                  (l) => l.date === dateStr && settings.members.includes(l.memberName)
-                );
-
-                const leavesCount = dayLeaves.length;
-                const overQuota = isOverQuota(leavesCount, quota);
+                const dayLeaves = entries
+                  .filter((l) => l.date === dateStr && settings.members.includes(l.memberName))
+                  .sort((a, b) => a.order - b.order);
 
                 const colSpanStyle = dayIdx === 0 ? { gridColumnStart: getDay(day) + 1 } : {};
 
@@ -171,8 +202,8 @@ const FillingPage: React.FC<FillingPageProps> = ({
                         {format(day, 'd')}
                       </span>
                       {workDay && quota > 0 && (
-                        <div className={`flex items-center text-xs sm:text-xs px-1 py-0.5 sm:px-1.5 sm:py-0.5 rounded-full ${overQuota ? 'bg-red-100 text-red-700 font-bold' : 'bg-green-100 text-green-700'}`}>
-                          {leavesCount}/{quota}
+                        <div className={`flex items-center text-xs px-1 py-0.5 sm:px-1.5 rounded-full ${overQuota ? 'bg-red-100 text-red-700 font-bold' : 'bg-green-100 text-green-700'}`}>
+                          {used}/{quota}
                           {overQuota && <AlertCircle className="w-3 h-3 ml-0.5" />}
                         </div>
                       )}
@@ -183,30 +214,28 @@ const FillingPage: React.FC<FillingPageProps> = ({
                         <span className="text-4xl sm:text-2xl md:text-5xl font-black text-slate-200 select-none">O</span>
                       </div>
                     ) : (
-                      <div className="flex-1 px-0.5 pb-0.5 sm:px-2 sm:pb-2 flex flex-col gap-1 sm:gap-1">
+                      <div className="flex-1 px-0.5 pb-0.5 sm:px-2 sm:pb-2 flex flex-col gap-1">
                         {dayLeaves.map((leave) => {
                           const isCurrentUser = currentUser === leave.memberName;
                           return (
                             <div
-                              key={`${leave.memberName}_${leave.date}`}
-                              className={`
-                                flex justify-between items-center px-1 py-0.5 sm:px-2 sm:py-1.5 rounded border group
+                              key={`${leave.memberName}_${leave.date}_${leave.order}`}
+                              className={`flex justify-between items-center px-1 py-0.5 sm:px-2 sm:py-1.5 rounded border group
                                 ${isCurrentUser
                                   ? 'bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-300 z-10'
-                                  : 'bg-blue-50 text-blue-700 border-blue-100'}
-                              `}
+                                  : 'bg-blue-50 text-blue-700 border-blue-100'}`}
                             >
-                              <div className="flex-1 flex justify-between items-center overflow-hidden mr-1">
-                                <span className="font-bold truncate text-xs sm:text-xs leading-tight">{leave.memberName}</span>
-                                <span className="font-bold whitespace-nowrap text-xs sm:text-xs leading-tight ml-1">{leave.type}</span>
-                              </div>
-                              {currentUser === leave.memberName && (
+                              <span className="truncate text-xs leading-tight flex-1 flex items-center justify-between pr-1">
+                                <span className="font-semibold">{leave.memberName}</span>
+                                <span className="font-black ml-2 shrink-0">{leave.category}{leave.order}</span>
+                              </span>
+                              {isCurrentUser && (
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleRemoveLeave(leave.memberName, leave.date);
+                                    onDeleteEntry(leave.memberName, leave.date, leave.order);
                                   }}
-                                  className="text-gray-400 hover:text-red-600 ml-1"
+                                  className="text-gray-400 hover:text-red-600 ml-1 flex-shrink-0"
                                 >
                                   <X className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                                 </button>
@@ -215,15 +244,15 @@ const FillingPage: React.FC<FillingPageProps> = ({
                           );
                         })}
 
-                        {currentUser && quota > 0 && (
+                        {currentUser && quota > 0 && used < quota && (
                           <button
                             onClick={() => {
                               setSelectedDate(dateStr);
-                              setSelectedType('');
+                              setSelectedCategory('');
                             }}
-                            className={`mt-auto w-full flex justify-center items-center py-1 sm:py-1 border-2 border-dashed border-gray-200 rounded text-gray-400 transition-colors text-xs sm:text-xs h-6 sm:h-auto ${group === 'A' ? 'hover:border-indigo-500 hover:text-indigo-500' : 'hover:border-teal-500 hover:text-teal-500'}`}
+                            className={`mt-auto w-full flex justify-center items-center py-1 border-2 border-dashed border-gray-200 rounded text-gray-400 transition-colors text-xs h-6 sm:h-auto ${group === 'A' ? 'hover:border-indigo-500 hover:text-indigo-500' : 'hover:border-teal-500 hover:text-teal-500'}`}
                           >
-                            <Plus className="w-3 h-3 sm:w-3 sm:h-3" />
+                            <Plus className="w-3 h-3" />
                           </button>
                         )}
                       </div>
@@ -236,6 +265,7 @@ const FillingPage: React.FC<FillingPageProps> = ({
         </div>
       </div>
 
+      {/* Add leave modal */}
       {selectedDate && (
         <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
           <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
@@ -250,27 +280,47 @@ const FillingPage: React.FC<FillingPageProps> = ({
                     </h3>
                     <div className="mb-4 text-base text-gray-500">
                       <p>填寫人：<span className="font-bold text-gray-900">{currentUser}</span></p>
-                      <p>當日配額：{getQuota(selectedDate)} ({isIntegerQuota ? '可選一般假別' : '可選一般假別 + 外宿'})</p>
+                      <p>當日配額：{quota4Selected}　已用：{used4Selected}　剩餘：{remaining4Selected}</p>
+                      <p className="text-xs mt-1 text-gray-400">本月第 {nextOrderForMember(currentUser)} 順位</p>
                     </div>
 
-                    <div className="grid grid-cols-4 gap-2">
-                      {availableLeaveTypes.map((type) => (
+                    <p className="text-sm font-medium text-gray-700 mb-2">全天假別（佔 1）</p>
+                    <div className="grid grid-cols-5 gap-2 mb-3">
+                      {FULL_DAY_CATEGORIES.filter((c) => CATEGORY_WEIGHT[c] <= remaining4Selected).map((cat) => (
                         <button
-                          key={type}
-                          onClick={() => setSelectedType(type)}
-                          className={`p-3 text-base rounded border ${selectedType === type ? `${groupBgClass} text-white border-transparent` : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          key={cat}
+                          onClick={() => setSelectedCategory(cat)}
+                          className={`p-3 text-base rounded border ${selectedCategory === cat ? `${groupBgClass} text-white border-transparent` : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
                         >
-                          {type}
+                          {cat}
                         </button>
                       ))}
                     </div>
+
+                    {remaining4Selected >= 0.5 && (
+                      <>
+                        <p className="text-sm font-medium text-gray-700 mb-2">半天假別（佔 0.5）</p>
+                        <div className="grid grid-cols-5 gap-2">
+                          <button
+                            onClick={() => setSelectedCategory('宿')}
+                            className={`p-3 text-base rounded border ${selectedCategory === '宿' ? `${groupBgClass} text-white border-transparent` : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}`}
+                          >
+                            宿
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {availableCategories.length === 0 && (
+                      <p className="text-sm text-red-500 mt-2">配額已滿，無可用假別。</p>
+                    )}
                   </div>
                 </div>
               </div>
               <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse gap-2 sm:gap-0">
                 <button
                   type="button"
-                  disabled={!selectedType}
+                  disabled={!selectedCategory}
                   className={`w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-3 text-base font-medium text-white focus:outline-none disabled:opacity-50 sm:ml-3 sm:w-auto sm:text-sm transition-colors ${groupBgClass}`}
                   onClick={handleAddLeave}
                 >

@@ -4,7 +4,9 @@
       "Bash(xargs wc *)",
       "Bash(npm install *)",
       "Bash(npm test *)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(curl -s https://Parttime-sin.github.io/LeaveTable/)",
+      "Bash(npx tsc *)"
     ]
   }
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Calendar, LogOut, User as UserIcon, ShieldCheck, Menu, X } from 'lucide-react';
+import { Settings, Calendar, LogOut, User as UserIcon, ShieldCheck, Menu, X, History } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { PageView, GroupType } from '../types';
 
@@ -60,6 +60,17 @@ const Navbar: React.FC<NavbarProps> = ({
               >
                 <Calendar className="w-4 h-4 mr-2" />
                 假表填寫
+              </button>
+              <button
+                onClick={() => onNavigate('history')}
+                className={`inline-flex items-center px-3 pt-1 border-b-2 text-sm font-medium h-full transition-all ${
+                  currentPage === 'history'
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                }`}
+              >
+                <History className="w-4 h-4 mr-2" />
+                歷史紀錄
               </button>
             </div>
           </div>
@@ -163,6 +174,17 @@ const Navbar: React.FC<NavbarProps> = ({
             >
               <Calendar className="w-5 h-5 mr-3" />
               假表填寫
+            </button>
+            <button
+              onClick={() => { onNavigate('history'); setIsMobileMenuOpen(false); }}
+              className={`w-full flex items-center pl-3 pr-4 py-3 border-l-4 text-base font-medium transition-colors ${
+                currentPage === 'history'
+                  ? 'bg-blue-50 border-primary text-primary'
+                  : 'border-transparent text-slate-600 hover:bg-slate-50 hover:border-slate-300 hover:text-slate-800'
+              }`}
+            >
+              <History className="w-5 h-5 mr-3" />
+              歷史紀錄
             </button>
           </div>
           

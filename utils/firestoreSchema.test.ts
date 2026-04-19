@@ -5,6 +5,7 @@ import {
   settingsDocId,
   leavesMonthGroupId,
   leaveEntryId,
+  previousMonthKey,
 } from './firestoreSchema';
 
 describe('firestoreSchema', () => {
@@ -27,11 +28,20 @@ describe('firestoreSchema', () => {
     expect(leavesMonthGroupId('2025-04', 'A')).toBe('2025-04_A');
   });
 
-  it('leaveEntryId is deterministic for member+date', () => {
-    expect(leaveEntryId('王小明', '2025-04-15')).toBe('王小明_2025-04-15');
+  it('leaveEntryId is deterministic for member+date+order', () => {
+    expect(leaveEntryId('王小明', '2025-04-15', 1)).toBe('王小明_2025-04-15_1');
+    expect(leaveEntryId('王小明', '2025-04-15', 2)).toBe('王小明_2025-04-15_2');
   });
 
   it('different groups produce different doc ids for same month', () => {
     expect(settingsDocId('2025-04', 'A')).not.toBe(settingsDocId('2025-04', 'B'));
+  });
+
+  it('previousMonthKey goes back one month', () => {
+    expect(previousMonthKey('2025-05')).toBe('2025-04');
+  });
+
+  it('previousMonthKey handles year boundary', () => {
+    expect(previousMonthKey('2025-01')).toBe('2024-12');
   });
 });

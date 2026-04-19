@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Navbar from './components/Navbar';
 import SettingsPage from './pages/SettingsPage';
 import FillingPage from './pages/FillingPage';
+import HistoryPage from './pages/HistoryPage';
 import LoginPage from './components/LoginPage';
 import DebugConsole from './components/DebugConsole';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -27,6 +28,7 @@ import {
   clearRedirectFlag,
 } from './firebase';
 import { monthKey as toMonthKey } from './utils/firestoreSchema';
+import { writeAuditLog, diffSettingsAudits } from './utils/auditLog';
 import { User } from 'firebase/auth';
 import { addLog } from './logger';
 
@@ -213,10 +215,25 @@ const App: React.FC = () => {
 
   // Settings save
   const handleSaveSettings = async (newSettings: MonthlySettings) => {
+    const before = monthSettings;
     setMonthSettings(newSettings); // optimistic
     if (isFirebaseReady && !isRemoteUpdate.current && user) {
       try {
         await saveMonthSettings(newSettings, user.email);
+        // audit: write one entry per kind of change detected
+        const diffs = diffSettingsAudits(before, newSettings);
+        for (const d of diffs) {
+          await writeAuditLog({
+            user: { email: user.email, displayName: user.displayName },
+            group: newSettings.group,
+            monthKey: newSettings.monthKey,
+            action: d.action,
+            target: {},
+            before: d.before,
+            after: d.after,
+            extra: d.extra,
+          });
+        }
       } catch (e: any) {
         addLog(`saveMonthSettings failed: ${e.message}`, 'error');
         alert('同步失敗，請稍後重試');
@@ -226,16 +243,21 @@ const App: React.FC = () => {
 
   // Per-entry add/update
   const handleSaveLeaveEntry = async (entry: MonthlyLeaveEntry) => {
-    // Optimistic local update: replace any existing entry for same member+date
-    setMonthEntries((prev) => {
-      const filtered = prev.filter(
-        (e) => !(e.memberName === entry.memberName && e.date === entry.date)
-      );
-      return [...filtered, entry];
-    });
+    // Optimistic local update: append new entry (member can have multiple entries per month)
+    setMonthEntries((prev) => [...prev, entry]);
     if (isFirebaseReady && user) {
       try {
         await saveLeaveEntry(entry, user.email);
+        await writeAuditLog({
+          user: { email: user.email, displayName: user.displayName },
+          group: entry.group,
+          monthKey: entry.monthKey,
+          action: 'ADD_LEAVE',
+          target: { date: entry.date, memberName: entry.memberName },
+          before: null,
+          after: entry,
+          extra: `${entry.category}${entry.order}`,
+        });
       } catch (e: any) {
         addLog(`saveLeaveEntry failed: ${e.message}`, 'error');
         alert('儲存假單失敗');
@@ -244,13 +266,32 @@ const App: React.FC = () => {
   };
 
   // Per-entry delete
-  const handleDeleteLeaveEntry = async (memberName: string, date: string) => {
-    setMonthEntries((prev) =>
-      prev.filter((e) => !(e.memberName === memberName && e.date === date))
+  const handleDeleteLeaveEntry = async (memberName: string, date: string, order: number) => {
+    const prevEntry = monthEntries.find(
+      (e) => e.memberName === memberName && e.date === date && e.order === order
     );
+    // Optimistic: remove target and reorder member entries locally
+    setMonthEntries((prev) => {
+      const removed = prev.filter(
+        (e) => !(e.memberName === memberName && e.date === date && e.order === order)
+      );
+      return removed.map((e) =>
+        e.memberName === memberName && e.order > order ? { ...e, order: e.order - 1 } : e
+      );
+    });
     if (isFirebaseReady && user) {
       try {
-        await deleteLeaveEntry(currentMonthKey, currentGroup, memberName, date);
+        const allMemberEntries = monthEntries.filter((e) => e.memberName === memberName);
+        await deleteLeaveEntry(currentMonthKey, currentGroup, memberName, date, order, allMemberEntries, user.email);
+        await writeAuditLog({
+          user: { email: user.email, displayName: user.displayName },
+          group: currentGroup,
+          monthKey: currentMonthKey,
+          action: 'REMOVE_LEAVE',
+          target: { date, memberName },
+          before: prevEntry ?? null,
+          after: null,
+        });
       } catch (e: any) {
         addLog(`deleteLeaveEntry failed: ${e.message}`, 'error');
         alert('刪除假單失敗');
@@ -309,31 +350,35 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {dataLoading ? (
-          <div className="flex justify-center py-10">
-            <div className="animate-spin h-8 w-8 border-b-2 border-primary rounded-full"></div>
-          </div>
-        ) : (
-          <ErrorBoundary onShowDebug={() => setShowDebug(true)}>
-            {page === 'settings' && (
-              <SettingsPage
-                settings={monthSettings}
-                currentMonthKey={currentMonthKey}
-                onSaveSettings={handleSaveSettings}
-                onChangeMonth={handleChangeMonth}
-              />
-            )}
-            {page === 'filling' && (
-              <FillingPage
-                settings={monthSettings}
-                entries={monthEntries}
-                currentMonthKey={currentMonthKey}
-                onSaveEntry={handleSaveLeaveEntry}
-                onDeleteEntry={handleDeleteLeaveEntry}
-              />
-            )}
-          </ErrorBoundary>
-        )}
+        <ErrorBoundary onShowDebug={() => setShowDebug(true)}>
+          {page === 'history' ? (
+            <HistoryPage />
+          ) : dataLoading ? (
+            <div className="flex justify-center py-10">
+              <div className="animate-spin h-8 w-8 border-b-2 border-primary rounded-full"></div>
+            </div>
+          ) : (
+            <>
+              {page === 'settings' && (
+                <SettingsPage
+                  settings={monthSettings}
+                  currentMonthKey={currentMonthKey}
+                  onSaveSettings={handleSaveSettings}
+                  onChangeMonth={handleChangeMonth}
+                />
+              )}
+              {page === 'filling' && (
+                <FillingPage
+                  settings={monthSettings}
+                  entries={monthEntries}
+                  currentMonthKey={currentMonthKey}
+                  onSaveEntry={handleSaveLeaveEntry}
+                  onDeleteEntry={handleDeleteLeaveEntry}
+                />
+              )}
+            </>
+          )}
+        </ErrorBoundary>
       </main>
 
       <DebugConsole isVisible={showDebug} onClose={() => setShowDebug(false)} />
