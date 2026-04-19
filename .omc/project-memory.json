@@ -137,14 +137,20 @@
   "hotPaths": [
     {
       "path": "App.tsx",
-      "accessCount": 27,
-      "lastAccessed": 1776596236652,
+      "accessCount": 30,
+      "lastAccessed": 1776599207214,
       "type": "file"
     },
     {
       "path": "firebase.ts",
       "accessCount": 17,
       "lastAccessed": 1776596106939,
+      "type": "file"
+    },
+    {
+      "path": "utils\\auditLog.ts",
+      "accessCount": 15,
+      "lastAccessed": 1776599189612,
       "type": "file"
     },
     {
@@ -172,12 +178,6 @@
       "type": "file"
     },
     {
-      "path": "utils\\auditLog.ts",
-      "accessCount": 10,
-      "lastAccessed": 1776596217511,
-      "type": "file"
-    },
-    {
       "path": "",
       "accessCount": 8,
       "lastAccessed": 1776596242361,
@@ -187,6 +187,12 @@
       "path": "constants.ts",
       "accessCount": 7,
       "lastAccessed": 1776596045556,
+      "type": "file"
+    },
+    {
+      "path": "README.md",
+      "accessCount": 7,
+      "lastAccessed": 1776599280830,
       "type": "file"
     },
     {
@@ -247,12 +253,6 @@
       "path": "logger.ts",
       "accessCount": 3,
       "lastAccessed": 1776510067188,
-      "type": "file"
-    },
-    {
-      "path": "README.md",
-      "accessCount": 3,
-      "lastAccessed": 1776510075514,
       "type": "file"
     },
     {

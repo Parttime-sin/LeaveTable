@@ -28,7 +28,7 @@ import {
   clearRedirectFlag,
 } from './firebase';
 import { monthKey as toMonthKey } from './utils/firestoreSchema';
-import { writeAuditLog, diffSettingsAudits } from './utils/auditLog';
+import { writeAuditLog, diffSettingsAudits, deleteExpiredAuditLogs } from './utils/auditLog';
 import { User } from 'firebase/auth';
 import { addLog } from './logger';
 
@@ -121,6 +121,7 @@ const App: React.FC = () => {
         setAuthLoading(false);
         clearTimeout(safetyTimer);
         clearRedirectFlag();
+        deleteExpiredAuditLogs();
       } else {
         addLog('Auth: No user session found.');
         setUser(null);

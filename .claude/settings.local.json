@@ -6,7 +6,12 @@
       "Bash(npm test *)",
       "Bash(npm run *)",
       "Bash(curl -s https://Parttime-sin.github.io/LeaveTable/)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Read(//c/Users/User/.claude/ys_brain/**)"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\User\\.claude\\ys_brain\\Projects\\leavetable",
+      "c:\\Users\\User\\.claude\\ys_brain\\Projects"
     ]
   }
 }

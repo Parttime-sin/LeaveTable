@@ -5,6 +5,9 @@ import {
   query,
   orderBy,
   limit,
+  where,
+  getDocs,
+  writeBatch,
   Timestamp,
   Unsubscribe,
 } from 'firebase/firestore';
@@ -167,4 +170,30 @@ export const subscribeAuditLogs = (
       onError(err);
     }
   );
+};
+
+/**
+ * Delete audit log entries older than TTL_MS. Called once on login.
+ * Runs silently in background — never throws into caller.
+ */
+export const deleteExpiredAuditLogs = async (): Promise<void> => {
+  if (!isFirebaseEnabled() || !db) return;
+  try {
+    const cutoff = Date.now() - TTL_MS;
+    const ref = collection(db, ROOT_COLLECTION, AUDIT_HOLDER_DOC, AUDIT_SUBCOLLECTION);
+    const q = query(ref, where('timestamp', '<', cutoff));
+    const snap = await getDocs(q);
+    if (snap.empty) return;
+
+    // Firestore batch limit is 500 writes
+    const docs = snap.docs;
+    for (let i = 0; i < docs.length; i += 500) {
+      const batch = writeBatch(db);
+      docs.slice(i, i + 500).forEach((d) => batch.delete(d.ref));
+      await batch.commit();
+    }
+    console.log(`deleteExpiredAuditLogs: removed ${docs.length} expired entries`);
+  } catch (e) {
+    console.error('deleteExpiredAuditLogs failed:', e);
+  }
 };
