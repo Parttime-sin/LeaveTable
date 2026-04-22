@@ -1,7 +1,0 @@
-{
-  "tool_name": "Bash",
-  "tool_input_preview": "{\"command\":\"cd c:/Users/User/Desktop/LeaveTable && npm run build 2>&1\",\"timeout\":180000,\"description\":\"Build to verify Sprint 2 TypeScript compiles\"}",
-  "error": "Exit code 2\n\n> shift-scheduler@1.0.0 build\n> tsc && vite build\n\ncomponents/PreviewModal.tsx(161,44): error TS2339: Property 'id' does not exist on type 'MonthlyLeaveEntry'.",
-  "timestamp": "2026-04-18T15:15:21.817Z",
-  "retry_count": 1
-}

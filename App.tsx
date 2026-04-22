@@ -36,11 +36,14 @@ const App: React.FC = () => {
   const [page, setPage] = useState<PageView>('filling');
   const [currentGroup, setCurrentGroup] = useState<GroupType>('A');
 
-  // Current viewed month (defaults to this month)
+  // Current viewed month: after the 15th, default to next month (班表提前排)
   const today = new Date();
-  const [currentMonthKey, setCurrentMonthKey] = useState<string>(
-    toMonthKey(today.getFullYear(), today.getMonth())
-  );
+  const defaultMonth = (() => {
+    const base = new Date(today.getFullYear(), today.getMonth(), 1);
+    if (today.getDate() > 15) base.setMonth(base.getMonth() + 1);
+    return toMonthKey(base.getFullYear(), base.getMonth());
+  })();
+  const [currentMonthKey, setCurrentMonthKey] = useState<string>(defaultMonth);
 
   // Month data (settings + entries) for the current month+group
   const [monthSettings, setMonthSettings] = useState<MonthlySettings>(
